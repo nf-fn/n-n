@@ -80,18 +80,22 @@ inline float clampf(float v, float lo, float hi) {
 // 頭は画面より少し大きく取って端を切らせている。
 namespace plush {
 
+// 頭も横長の楕円にする。画面幅 128 に対し左右 2px ずつ残る。
 constexpr int kHeadCx = 0;
-constexpr int kHeadCy = -10;
-constexpr int kHeadRx = 58;
-constexpr int kHeadRy = 56;
+constexpr int kHeadCy = -8;
+constexpr int kHeadRx = 62;
+constexpr int kHeadRy = 50;
 
-constexpr int kEarOffsetX = 40;
-constexpr int kEarY = 42;
-constexpr int kEarR = 19;
+// 耳も楕円。頭の上端 (y = +42) から覗く位置に置く。
+constexpr int kEarOffsetX = 41;
+constexpr int kEarY = 40;
+constexpr int kEarRx = 21;
+constexpr int kEarRy = 18;
 
 constexpr int kPatchCx = 0;
 constexpr int kPatchCy = -14;
-constexpr int kPatchRx = 37;
+// 横に広い楕円にする。頭の半径 58 に対して 45 なので、左右に白い毛が残る。
+constexpr int kPatchRx = 45;
 constexpr int kPatchRy = 32;
 
 constexpr int kEyeSpacing = 20;
@@ -295,8 +299,8 @@ void FaceRenderer::drawPlushFace(const FaceParams &params, float open) {
 
   // 背景 (透過色) の上に、白い毛の頭と耳を置く
   face_.fillSprite(skin_);
-  face_.fillCircle(px(-kEarOffsetX), py(kEarY), kEarR, fur_);
-  face_.fillCircle(px(kEarOffsetX), py(kEarY), kEarR, fur_);
+  face_.fillEllipse(px(-kEarOffsetX), py(kEarY), kEarRx, kEarRy, fur_);
+  face_.fillEllipse(px(kEarOffsetX), py(kEarY), kEarRx, kEarRy, fur_);
   face_.fillEllipse(px(kHeadCx), py(kHeadCy), kHeadRx, kHeadRy, fur_);
 
   // 顔のグレージュ部分

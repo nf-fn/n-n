@@ -33,7 +33,7 @@ Posture postureFromUp(float ux, float uy, float uz) {
 
 // まばたきを挟まない時刻で 1 枚だけ取る
 FaceParams composeAt(FaceComposer &composer, const Posture &p, uint32_t tMs) {
-  return composer.compose(p, tMs);
+  return composer.compose(p, pet::MoodState{}, tMs);
 }
 
 }  // namespace
@@ -112,7 +112,7 @@ void test_blinks_within_ten_seconds() {
 
   bool sawClosed = false;
   for (uint32_t t = 0; t < 10000; t += 20) {
-    if (composer.compose(p, t).eyeOpen < 0.3f) {
+    if (composer.compose(p, pet::MoodState{}, t).eyeOpen < 0.3f) {
       sawClosed = true;
       break;
     }
@@ -128,7 +128,7 @@ void test_blink_is_brief_and_eyes_reopen() {
   int closedFrames = 0;
   int totalFrames = 0;
   for (uint32_t t = 0; t < 20000; t += 20) {
-    if (composer.compose(p, t).eyeOpen < 0.3f) {
+    if (composer.compose(p, pet::MoodState{}, t).eyeOpen < 0.3f) {
       ++closedFrames;
     }
     ++totalFrames;
@@ -148,7 +148,7 @@ void test_blink_intervals_vary() {
   int count = 0;
   bool wasClosed = false;
   for (uint32_t t = 0; t < 60000 && count < 8; t += 20) {
-    const bool closed = composer.compose(p, t).eyeOpen < 0.3f;
+    const bool closed = composer.compose(p, pet::MoodState{}, t).eyeOpen < 0.3f;
     if (closed && !wasClosed) {
       starts[count++] = t;
     }
@@ -183,11 +183,153 @@ void test_blink_is_not_a_smile() {
   const Posture p = postureFromUp(0.0f, 0.0f, 1.0f);
 
   for (uint32_t t = 0; t < 20000; t += 20) {
-    const FaceParams f = composer.compose(p, t);
+    const FaceParams f = composer.compose(p, pet::MoodState{}, t);
     if (f.eyeOpen < 0.3f) {
       TEST_ASSERT_TRUE(f.eyeArch <= 0.0f);
     }
   }
+}
+
+// --- 気分が表情に出ること (フェーズ 3) ---
+
+namespace {
+
+// 気分を与えたまま時間を進め、補間を落ち着かせる
+FaceParams settleWith(FaceComposer &composer, const pet::MoodState &mood,
+                      uint32_t startMs = 100000) {
+  const Posture p = postureFromUp(0.0f, 0.0f, 1.0f);
+  FaceParams f;
+  for (uint32_t t = startMs; t < startMs + 2000; t += 20) {
+    f = composer.compose(p, mood, t);
+  }
+  return f;
+}
+
+}  // namespace
+
+// 怒ると眉が出て、内側が下がる。
+void test_anger_raises_brows() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.anger = 0.9f;
+
+  const FaceParams f = settleWith(composer, mood);
+
+  TEST_ASSERT_TRUE_MESSAGE(f.browAngle > 0.5f, "怒っても眉が出ていない");
+}
+
+// 機嫌が良いと目を瞑った上向きの弧になる。
+void test_happy_closes_eyes_into_an_arch() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.valence = 0.9f;
+
+  const FaceParams f = settleWith(composer, mood);
+
+  TEST_ASSERT_TRUE_MESSAGE(f.eyeOpen < 0.2f, "笑っても目を瞑っていない");
+  TEST_ASSERT_TRUE_MESSAGE(f.eyeArch > 0.7f, "笑いの弧が上を向いていない");
+}
+
+// 眠いと目が細まり、弧は下を向く。笑いと逆向きであること。
+void test_sleepy_droops_eyes_downward() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.sleepiness = 0.9f;
+
+  const FaceParams f = settleWith(composer, mood);
+
+  TEST_ASSERT_TRUE(f.eyeOpen < 0.3f);
+  TEST_ASSERT_TRUE_MESSAGE(f.eyeArch < -0.5f, "眠気の弧が下を向いていない");
+}
+
+// めまいのとき瞳は中央から外れて回る。
+void test_dizziness_spins_the_pupils() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.dizziness = 0.9f;
+
+  const Posture p = postureFromUp(0.0f, 0.0f, 1.0f);  // 水平 = 本来は中央
+  float maxOffset = 0.0f;
+  bool moved = false;
+  float firstX = composer.compose(p, mood, 100000).eyeOffsetX;
+
+  for (uint32_t t = 100000; t < 102000; t += 20) {
+    const FaceParams f = composer.compose(p, mood, t);
+    const float mag = std::sqrt(f.eyeOffsetX * f.eyeOffsetX +
+                                f.eyeOffsetY * f.eyeOffsetY);
+    if (mag > maxOffset) {
+      maxOffset = mag;
+    }
+    if (std::fabs(f.eyeOffsetX - firstX) > 0.3f) {
+      moved = true;
+    }
+  }
+
+  TEST_ASSERT_TRUE_MESSAGE(maxOffset > 0.4f, "めまいでも瞳が中央のまま");
+  TEST_ASSERT_TRUE_MESSAGE(moved, "瞳が回っていない");
+}
+
+// 強い感情が勝つ。めまいと怒りが同時なら、めまいが顔を占領する。
+void test_dizziness_wins_over_anger() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.dizziness = 0.9f;
+  mood.anger = 0.9f;
+
+  const FaceParams f = settleWith(composer, mood);
+
+  TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.1f, 0.0f, f.browAngle,
+                                   "めまい中なのに眉が出ている");
+}
+
+// 怒りは眠気より強い。
+void test_anger_wins_over_sleepiness() {
+  FaceComposer composer;
+  pet::MoodState mood;
+  mood.anger = 0.9f;
+  mood.sleepiness = 0.9f;
+
+  const FaceParams f = settleWith(composer, mood);
+
+  TEST_ASSERT_TRUE(f.browAngle > 0.5f);
+  TEST_ASSERT_TRUE_MESSAGE(f.eyeOpen > 0.5f, "怒っているのに目が閉じている");
+}
+
+// 表情の切り替わりで顔が飛ばないこと。
+// 気分が閾値をまたいだ瞬間に値が跳ぶと、見ていて不自然になる。
+void test_expression_changes_are_smooth() {
+  FaceComposer composer;
+  const Posture p = postureFromUp(0.0f, 0.0f, 1.0f);
+
+  pet::MoodState calm;
+  for (uint32_t t = 0; t < 2000; t += 20) {
+    composer.compose(p, calm, t);
+  }
+
+  pet::MoodState angry;
+  angry.anger = 1.0f;
+
+  float prevBrow = composer.compose(p, angry, 2000).browAngle;
+  for (uint32_t t = 2020; t < 4000; t += 20) {
+    const float brow = composer.compose(p, angry, t).browAngle;
+    TEST_ASSERT_TRUE_MESSAGE(std::fabs(brow - prevBrow) < 0.15f,
+                             "眉の値が 1 フレームで飛んでいる");
+    prevBrow = brow;
+  }
+}
+
+// 逆さにされると困り眉になる。怒りとは逆向き。
+void test_inverted_posture_makes_worried_brows() {
+  FaceComposer composer;
+  const Posture p = postureFromUp(0.0f, -1.0f, 0.0f);
+  pet::MoodState calm;
+
+  FaceParams f;
+  for (uint32_t t = 100000; t < 102000; t += 20) {
+    f = composer.compose(p, calm, t);
+  }
+
+  TEST_ASSERT_TRUE_MESSAGE(f.browAngle < -0.4f, "逆さでも困り眉にならない");
 }
 
 int main(int, char **) {
@@ -203,5 +345,13 @@ int main(int, char **) {
   RUN_TEST(test_blink_intervals_vary);
   RUN_TEST(test_neutral_face_has_no_brows);
   RUN_TEST(test_blink_is_not_a_smile);
+  RUN_TEST(test_anger_raises_brows);
+  RUN_TEST(test_happy_closes_eyes_into_an_arch);
+  RUN_TEST(test_sleepy_droops_eyes_downward);
+  RUN_TEST(test_dizziness_spins_the_pupils);
+  RUN_TEST(test_dizziness_wins_over_anger);
+  RUN_TEST(test_anger_wins_over_sleepiness);
+  RUN_TEST(test_expression_changes_are_smooth);
+  RUN_TEST(test_inverted_posture_makes_worried_brows);
   return UNITY_END();
 }

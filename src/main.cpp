@@ -7,15 +7,15 @@
 //
 // 顔は PLUSH に決定した。口を持たないため、感情は目と眉だけで表す。
 //
-// フェーズ 2 では検出結果を画面下に出して実機で確かめる。
-// 検出を気分に繋いで表情を動かすのはフェーズ 3。
-// 画面を押すと表情のプレビューに切り替わる。
+// 触られ方 → 気分 → 表情 が繋がった状態。
+// 画面を押すと表情のプレビューに切り替わり、気分の出力を上書きして確認できる。
 
 #include <M5Unified.h>
 
 #include "FaceComposer.h"
 #include "FaceRenderer.h"
 #include "ImuSource.h"
+#include "Mood.h"
 #include "MotionAnalyzer.h"
 
 namespace {
@@ -25,6 +25,7 @@ constexpr uint32_t kRenderIntervalMs = 33;  // 約 30fps
 
 pet::ImuSource imu;
 pet::MotionAnalyzer analyzer;
+pet::Mood mood;
 pet::FaceComposer composer;
 pet::FaceRenderer renderer;
 
@@ -116,6 +117,8 @@ void loop() {
     pet::ImuSample sample;
     if (imu.read(sample)) {
       analyzer.update(sample);
+      mood.update(analyzer.event(), analyzer.activity(),
+                  kSensorIntervalMs / 1000.0f);
 
       switch (analyzer.event()) {
         case pet::MotionEvent::Tap:
@@ -137,7 +140,8 @@ void loop() {
   if (now - lastRenderMs >= kRenderIntervalMs) {
     lastRenderMs = now;
 
-    pet::FaceParams params = composer.compose(analyzer.posture(), now);
+    pet::FaceParams params =
+        composer.compose(analyzer.posture(), mood.state(), now);
 
     const Expression &e = kExpressions[expressionIndex];
     if (e.override) {

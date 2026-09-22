@@ -1,7 +1,12 @@
-// 姿勢から顔の描画パラメータを組み立てる層。
+// 姿勢と気分から顔の描画パラメータを組み立てる層。
 //
-// フェーズ 1 の責務は「目玉を下り坂へ転がす」「顔を少し傾ける」
-// 「まばたきする」の 3 つ。気分による表情はフェーズ 3 で足す。
+// この顔は口を持たないため、感情は目と眉だけで表す。
+//   笑い = 目を瞑った上向きの弧 / 怒り = 眉の内側を下げる
+//   眠気 = 深い下向きの弧       / めまい = 瞳が回る
+//
+// 気分が競合したときは強い感情が勝つ。
+// めまい > 怒り > 眠気 > 笑い の順で、閾値を超えたものが顔を占領する。
+// 複数を混ぜると何を感じているのか読み取れなくなるため。
 #pragma once
 
 #include "Types.h"
@@ -26,9 +31,20 @@ class FaceComposer {
   static constexpr uint32_t kBlinkIntervalMinMs = 2000;
   static constexpr uint32_t kBlinkIntervalMaxMs = 6000;
 
-  // 姿勢と現在時刻から 1 フレーム分のパラメータを作る。
-  // まばたきの進行があるため const ではない。
-  FaceParams compose(const Posture &posture, uint32_t tMs);
+  // 感情が顔を占領する閾値
+  static constexpr float kDizzyThreshold = 0.45f;
+  static constexpr float kAngerThreshold = 0.45f;
+  static constexpr float kSleepyThreshold = 0.60f;
+  static constexpr float kHappyThreshold = 0.45f;
+
+  // 表情が切り替わるときの補間の時定数 [秒]。
+  // 無いと閾値をまたいだ瞬間に顔が飛ぶ。
+  static constexpr float kExpressionTauSec = 0.25f;
+
+  // 姿勢・気分・現在時刻から 1 フレーム分のパラメータを作る。
+  // まばたきと補間の進行があるため const ではない。
+  FaceParams compose(const Posture &posture, const MoodState &mood,
+                     uint32_t tMs);
 
  private:
   float blinkOpenness(uint32_t tMs);
@@ -40,6 +56,14 @@ class FaceComposer {
 
   bool blinkScheduled_ = false;
   uint32_t blinkStartMs_ = 0;
+
+  // 補間中の表情。目標値へ向かって少しずつ動く。
+  float eyeOpen_ = 1.0f;
+  float eyeArch_ = 0.0f;
+  float browAngle_ = 0.0f;
+
+  bool timeKnown_ = false;
+  uint32_t lastMs_ = 0;
 };
 
 }  // namespace pet
