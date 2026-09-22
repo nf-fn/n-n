@@ -39,7 +39,7 @@ class FaceComposer {
 
   // 表情が切り替わるときの補間の時定数 [秒]。
   // 無いと閾値をまたいだ瞬間に顔が飛ぶ。
-  static constexpr float kExpressionTauSec = 0.25f;
+  static constexpr float kExpressionTauSec = 0.15f;
 
   // 姿勢・気分・現在時刻から 1 フレーム分のパラメータを作る。
   // まばたきと補間の進行があるため const ではない。

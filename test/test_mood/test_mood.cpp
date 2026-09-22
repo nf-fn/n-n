@@ -101,7 +101,7 @@ void test_dizziness_fades_after_shaking_stops() {
 
 void test_prolonged_shaking_makes_it_angry() {
   Mood mood;
-  hold(mood, Activity::Shake, 8.0f);
+  hold(mood, Activity::Shake, 4.0f);
 
   TEST_ASSERT_TRUE_MESSAGE(mood.state().anger > 0.5f,
                            "振り続けても怒らない");
@@ -140,7 +140,7 @@ void test_stroking_calms_anger() {
 
 void test_idle_makes_it_sleepy() {
   Mood mood;
-  idle(mood, 120.0f);
+  idle(mood, 60.0f);
 
   TEST_ASSERT_TRUE(mood.state().sleepiness > 0.5f);
 }

@@ -46,7 +46,10 @@ constexpr float kActivityHoldSec = 0.40f;
 // 撫でに入るときだけは長く待つ。撫では本来ずっと続く動作なので、
 // 短い窓で成立させる必要がない。歩行中に角速度が一瞬下がる窓や、
 // つつきの余韻を撫でと取り違えるのを防ぐ。
-constexpr float kStrokeHoldSec = 1.50f;
+//
+// 1.0 秒まで縮めると walk.csv を撫でと誤判定した。フィクスチャは 1 本しか
+// 無いので、失敗する値に対して 0.3 秒の余裕を残してある。
+constexpr float kStrokeHoldSec = 1.30f;
 
 // つつきの直後は接触の判定を止める。衝撃の余韻が撫でに見えるため。
 constexpr uint32_t kContactBlockAfterTapMs = 800;

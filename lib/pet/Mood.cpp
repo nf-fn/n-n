@@ -12,10 +12,10 @@ constexpr float kArousalBaseline = 0.3f;
 //
 // 速さの序列に意味がある。めまいはすぐ抜けるが、怒りは冷めにくい。
 // これが「さっきまで乱暴にされていた」という記憶として働く。
-constexpr float kArousalTau = 3.0f;
-constexpr float kValenceTau = 12.0f;
-constexpr float kDizzinessTau = 4.0f;
-constexpr float kAngerTau = 20.0f;
+constexpr float kArousalTau = 2.0f;
+constexpr float kValenceTau = 6.0f;
+constexpr float kDizzinessTau = 2.5f;
+constexpr float kAngerTau = 10.0f;
 
 // --- 刺激の量 ---
 
@@ -29,25 +29,25 @@ constexpr float kLiftWake = 0.70f;
 
 // --- 継続した状態が 1 秒あたりに与える量 ---
 
-constexpr float kStrokeValenceRate = 0.35f;
-constexpr float kStrokeAngerRate = -0.22f;   // 撫でると怒りが冷める
-constexpr float kStrokeSleepRate = -0.10f;
+constexpr float kStrokeValenceRate = 0.70f;
+constexpr float kStrokeAngerRate = -0.45f;   // 撫でると怒りが冷める
+constexpr float kStrokeSleepRate = -0.20f;
 constexpr float kStrokeArousalTarget = 0.5f;
 
-constexpr float kShakeDizzyRate = 0.45f;
-constexpr float kShakeAngerRate = 0.09f;     // 8 秒ほど振られて怒りに届く
-constexpr float kShakeValenceRate = -0.15f;
+constexpr float kShakeDizzyRate = 0.90f;
+constexpr float kShakeAngerRate = 0.18f;     // 3 秒ほど振られて怒りに届く
+constexpr float kShakeValenceRate = -0.30f;
 constexpr float kShakeSleepRate = -1.5f;
 constexpr float kShakeArousalTarget = 0.95f;
 
 constexpr float kCarriedSleepRate = -0.25f;
 constexpr float kCarriedArousalTarget = 0.55f;
 
-// 放置。2 分ほどでしっかり眠くなる。
-constexpr float kQuietSleepRate = 0.010f;
+// 放置。40 秒ほどでうとうとし始める。
+constexpr float kQuietSleepRate = 0.025f;
 
 // 覚醒度が目標へ寄る速さ [1/秒]
-constexpr float kArousalPullRate = 1.2f;
+constexpr float kArousalPullRate = 2.0f;
 
 float clampf(float v, float lo, float hi) {
   return v < lo ? lo : (v > hi ? hi : v);
