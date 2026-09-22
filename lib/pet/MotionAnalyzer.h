@@ -8,6 +8,7 @@
 // 閾値はすべて test/fixtures/*.csv の実測から決めている。根拠は .cpp に残す。
 #pragma once
 
+#include "Thresholds.h"
 #include "Types.h"
 
 namespace pet {
@@ -32,6 +33,10 @@ class MotionAnalyzer {
 
   void update(const ImuSample &sample);
 
+  // 閾値を差し替える。キャリブレーションの結果を反映するのに使う。
+  void setThresholds(const Thresholds &t) { thresholds_ = t; }
+  const Thresholds &thresholds() const { return thresholds_; }
+
   const Posture &posture() const { return posture_; }
 
   // この更新で起きた出来事。起きていなければ None。
@@ -44,6 +49,9 @@ class MotionAnalyzer {
   float linearAccel() const { return linEma_; }
   float angularRate() const { return gyroEma_; }
   float upwardAccel() const { return upwardAccel_; }
+
+  // 直近 1 サンプル間の加速度の変化量。つつきの鋭さを測るのに使う。
+  float jerk() const { return jerk_; }
 
  private:
   void recomputePosture();
@@ -69,6 +77,9 @@ class MotionAnalyzer {
   // 重力方向に沿った線形加速度。持ち上げの判定に使う。
   float upwardAccel_ = 0.0f;
 
+  // 直近 1 サンプル間の加速度の変化量
+  float jerk_ = 0.0f;
+
   bool initialized_ = false;
   uint32_t lastMs_ = 0;
   uint32_t nowMs_ = 0;
@@ -82,6 +93,8 @@ class MotionAnalyzer {
 
   // 静止から手で扱われている状態に移った。ゆっくりした持ち上げの手がかり。
   bool justLeftRest_ = false;
+
+  Thresholds thresholds_;
 
   Activity activity_ = Activity::Quiet;
   Activity candidate_ = Activity::Quiet;

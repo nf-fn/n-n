@@ -12,16 +12,34 @@ using pet::Activity;
 using pet::Mood;
 using pet::MoodState;
 using pet::MotionEvent;
+using pet::Posture;
 
 namespace {
 
 constexpr float kDt = 0.01f;  // 100Hz
 
+// 画面を上に向けて机に置いた姿勢。既定の状態。
+Posture faceUp() {
+  Posture p;
+  p.upZ = 1.0f;
+  p.faceUp = true;
+  return p;
+}
+
+// 画面を下に伏せた姿勢。
+Posture faceDown() {
+  Posture p;
+  p.upZ = -1.0f;
+  p.faceUp = false;
+  p.faceDown = true;
+  return p;
+}
+
 // 何もせずに時間を進める
-void idle(Mood &mood, float seconds) {
+void idle(Mood &mood, float seconds, const Posture &posture = faceUp()) {
   const int steps = static_cast<int>(seconds / kDt);
   for (int i = 0; i < steps; ++i) {
-    mood.update(MotionEvent::None, Activity::Quiet, kDt);
+    mood.update(MotionEvent::None, Activity::Quiet, posture, kDt);
   }
 }
 
@@ -29,7 +47,7 @@ void idle(Mood &mood, float seconds) {
 void hold(Mood &mood, Activity activity, float seconds) {
   const int steps = static_cast<int>(seconds / kDt);
   for (int i = 0; i < steps; ++i) {
-    mood.update(MotionEvent::None, activity, kDt);
+    mood.update(MotionEvent::None, activity, faceUp(), kDt);
   }
 }
 
@@ -46,7 +64,7 @@ void test_tap_spikes_arousal() {
   Mood mood;
   const float before = mood.state().arousal;
 
-  mood.update(MotionEvent::Tap, Activity::Quiet, kDt);
+  mood.update(MotionEvent::Tap, Activity::Quiet, faceUp(), kDt);
 
   TEST_ASSERT_TRUE_MESSAGE(mood.state().arousal > before + 0.2f,
                            "つついても覚醒度が跳ねていない");
@@ -56,7 +74,7 @@ void test_arousal_returns_after_tap() {
   Mood mood;
   const float baseline = mood.state().arousal;
 
-  mood.update(MotionEvent::Tap, Activity::Quiet, kDt);
+  mood.update(MotionEvent::Tap, Activity::Quiet, faceUp(), kDt);
   const float peak = mood.state().arousal;
 
   idle(mood, 15.0f);
@@ -73,7 +91,7 @@ void test_lift_wakes_up() {
   TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness > 0.5f,
                            "放置しても眠くなっていない");
 
-  mood.update(MotionEvent::Lift, Activity::Quiet, kDt);
+  mood.update(MotionEvent::Lift, Activity::Quiet, faceUp(), kDt);
 
   TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness < 0.5f,
                            "持ち上げても目が覚めていない");
@@ -193,6 +211,52 @@ void test_everything_settles_when_left_alone() {
   TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, s.valence);
 }
 
+// --- 伏せて寝かしつける ---
+//
+// 自然な眠気 (40 秒) とは別枠の、意図的なジェスチャーとして成立させる。
+
+void test_placing_it_face_down_puts_it_to_sleep_quickly() {
+  Mood mood;
+  idle(mood, 8.0f, faceDown());
+
+  TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness > 0.6f,
+                           "伏せても眠らない");
+}
+
+// 伏せていなければ、同じ時間では眠らない。差が付いていなければ意味がない。
+void test_face_up_does_not_sleep_that_fast() {
+  Mood mood;
+  idle(mood, 8.0f, faceUp());
+
+  TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness < 0.3f,
+                           "伏せていないのに早く眠っている");
+}
+
+// 起こせば覚める。伏せる/起こすが対になっていること。
+void test_lifting_it_wakes_it_from_face_down() {
+  Mood mood;
+  idle(mood, 8.0f, faceDown());
+  TEST_ASSERT_TRUE(mood.state().sleepiness > 0.6f);
+
+  mood.update(MotionEvent::Lift, Activity::Quiet, faceUp(), kDt);
+
+  TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness < 0.5f,
+                           "起こしても覚めない");
+}
+
+// 伏せた状態で振られても、寝かしつけにはならない。
+// 触られている最中は Quiet ではないので、そもそも対象外であること。
+void test_face_down_while_shaken_does_not_sleep() {
+  Mood mood;
+  const int steps = static_cast<int>(8.0f / kDt);
+  for (int i = 0; i < steps; ++i) {
+    mood.update(MotionEvent::None, Activity::Shake, faceDown(), kDt);
+  }
+
+  TEST_ASSERT_TRUE_MESSAGE(mood.state().sleepiness < 0.3f,
+                           "振られているのに眠っている");
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_tap_spikes_arousal);
@@ -209,5 +273,9 @@ int main(int, char **) {
   RUN_TEST(test_values_stay_in_range_under_sustained_shaking);
   RUN_TEST(test_values_stay_in_range_under_sustained_stroking);
   RUN_TEST(test_everything_settles_when_left_alone);
+  RUN_TEST(test_placing_it_face_down_puts_it_to_sleep_quickly);
+  RUN_TEST(test_face_up_does_not_sleep_that_fast);
+  RUN_TEST(test_lifting_it_wakes_it_from_face_down);
+  RUN_TEST(test_face_down_while_shaken_does_not_sleep);
   return UNITY_END();
 }

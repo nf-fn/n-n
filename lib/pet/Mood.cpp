@@ -46,6 +46,12 @@ constexpr float kHeldArousalTarget = 0.55f;
 // 放置。40 秒ほどでうとうとし始める。
 constexpr float kQuietSleepRate = 0.025f;
 
+// 画面を伏せて置かれたとき。放置より桁違いに速く眠る。
+//
+// これは自然な眠気ではなく「寝かしつけ」。伏せれば寝る、起こせば起きる、
+// という意図的なジェスチャーとして成立させたい。5 秒ほどで眠りに入る。
+constexpr float kFaceDownSleepRate = 0.12f;
+
 // 覚醒度が目標へ寄る速さ [1/秒]
 constexpr float kArousalPullRate = 2.0f;
 
@@ -61,7 +67,8 @@ void decayToward(float &value, float target, float tau, float dt) {
 
 }  // namespace
 
-void Mood::update(MotionEvent event, Activity activity, float dt) {
+void Mood::update(MotionEvent event, Activity activity, const Posture &posture,
+                  float dt) {
   if (dt <= 0.0f) {
     return;
   }
@@ -102,7 +109,9 @@ void Mood::update(MotionEvent event, Activity activity, float dt) {
       break;
 
     case Activity::Quiet:
-      state_.sleepiness += kQuietSleepRate * dt;
+      // 伏せて置かれているなら寝かしつけ。触られている最中は対象外。
+      state_.sleepiness +=
+          (posture.faceDown ? kFaceDownSleepRate : kQuietSleepRate) * dt;
       break;
   }
 

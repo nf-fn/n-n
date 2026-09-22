@@ -16,6 +16,9 @@
 
 #include <M5Unified.h>
 
+#include "Calibration.h"
+#include "CalibrationStore.h"
+#include "CalibrationUi.h"
 #include "FaceComposer.h"
 #include "FaceRenderer.h"
 #include "ImuSource.h"
@@ -40,6 +43,14 @@ pet::FaceRenderer renderer;
 pet::VoiceComposer voice;
 pet::VoiceOutput speaker;
 
+pet::CalibrationStore calibStore;
+pet::CalibrationSet calibration;
+pet::CalibrationUi calibUi;
+
+// 長押しと短押しを分ける閾値 [ms]。つつくつもりで設定に入ると困るので
+// 既定より長めに取る。
+constexpr uint32_t kHoldThreshMs = 700;
+
 uint32_t lastSensorMs = 0;
 uint32_t lastRenderMs = 0;
 
@@ -59,6 +70,14 @@ void setup() {
   Serial.begin(115200);
 
   imu.begin();
+
+  M5.BtnA.setHoldThresh(kHoldThreshMs);
+
+  // 保存してあるキャリブレーションを読み、閾値に反映する。
+  // 何も無ければ既定値のまま。
+  calibStore.load(calibration);
+  analyzer.setThresholds(pet::resolve(calibration));
+  calibUi.begin(&calibStore, &calibration);
 
   if (!speaker.begin(kVolume)) {
     Serial.println("スピーカーが見つかりません (Echo Base の接続を確認)");
@@ -81,9 +100,28 @@ void loop() {
 
   const uint32_t now = millis();
 
-  // 画面を押すのは「つつく」と同じ扱いにする。
-  // 眠っていれば起き、驚いて鳴く。別の概念を増やす必要がない。
-  if (M5.BtnA.wasPressed()) {
+  // --- キャリブレーション中は画面とボタンを明け渡す ---
+  if (calibUi.active()) {
+    pet::ImuSample sample;
+    const bool haveSample = imu.read(sample);
+    if (calibUi.update(now, haveSample ? &sample : nullptr)) {
+      // 設定が変わったので閾値を入れ直す
+      analyzer.setThresholds(pet::resolve(calibration));
+    }
+    if (!calibUi.active()) {
+      // 抜けた直後は顔を描き直す
+      lastRenderMs = 0;
+    }
+    delay(1);
+    return;
+  }
+
+  // 長押しでキャリブレーションへ。短押しは「つつく」のまま。
+  if (M5.BtnA.wasHold()) {
+    calibUi.enter();
+    return;
+  }
+  if (M5.BtnA.wasClicked()) {
     buttonPending = true;
   }
 
@@ -100,7 +138,8 @@ void loop() {
         buttonPending = false;
       }
 
-      mood.update(event, analyzer.activity(), kSensorIntervalMs / 1000.0f);
+      mood.update(event, analyzer.activity(), analyzer.posture(),
+                  kSensorIntervalMs / 1000.0f);
 
       const pet::VoiceCue cue = voice.update(event, mood.state(), now);
       if (!cue.empty()) {

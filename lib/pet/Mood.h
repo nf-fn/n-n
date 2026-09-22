@@ -11,7 +11,9 @@ namespace pet {
 
 class Mood {
  public:
-  void update(MotionEvent event, Activity activity, float dt);
+  // 姿勢も渡す。画面を伏せられたら寝かしつけられたものとして扱うため。
+  void update(MotionEvent event, Activity activity, const Posture &posture,
+              float dt);
 
   const MoodState &state() const { return state_; }
 

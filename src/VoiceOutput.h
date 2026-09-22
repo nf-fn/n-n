@@ -14,7 +14,10 @@ namespace pet {
 
 class VoiceOutput {
  public:
+  // PSRAM からバッファを確保する。8MB あるので内蔵 RAM を使う理由がない。
+  // 確保できなければ内蔵 RAM に落ちる。
   bool begin(uint8_t volume);
+  ~VoiceOutput();
 
   // 鳴らし始める。再生中なら今の鳴き声を止めて差し替える。
   // 新しい反応のほうが古い反応より優先されるべきなので。
@@ -24,7 +27,7 @@ class VoiceOutput {
 
  private:
   VoiceSynth synth_;
-  int16_t buffer_[VoiceSynth::kMaxSamples];
+  int16_t *buffer_ = nullptr;
   bool ready_ = false;
 };
 

@@ -10,41 +10,16 @@ namespace {
 constexpr uint32_t kDefaultStepMs = 10;
 constexpr uint32_t kMaxStepMs = 100;
 
-// --- 分類の閾値 ---
+// --- 閾値以外の定数 ---
 //
-// すべて test/fixtures/*.csv の実測から決めた。平滑化後 (tau 0.30s) の
-// 線形加速度 [g] と角速度 [deg/s] の p10〜p90 は次のとおりだった:
-//
-//   動作     線形加速度      角速度
-//   idle     0.001-0.002     0.5
-//   stroke   0.069-0.089     9.1-14.9
-//   walk     0.091-0.225    27.6-55.2
-//   shake    0.556-0.813    59.8-89.0
-//   lift     0.067-0.476    15.6-118.7
-//   tap      0.008-0.072     1.5-15.1  (背景は静かで、衝撃だけが鋭い)
-
-// 静止と見なす上限。idle の 0.002 と stroke の 0.069 の間。
-constexpr float kQuietLin = 0.02f;
-
-// 撫で・手持ちと見なす線形加速度の下限。tap の裾 (0.072) を避けつつ
-// stroke の下限 (0.069) は拾いたいので、持続時間の条件と併用する。
-constexpr float kContactMinLin = 0.045f;
-
-// 撫で・手持ちの上限。手持ちの上限 0.225 より上、振りの下限 0.556 より下。
-constexpr float kContactMaxLin = 0.30f;
-
-// 撫でと手持ちを分ける角速度。ここが最も重要な境界。
-// 大きさでは重なる撫で (9-15) と手持ち (28-55) を、これだけで分離できる。
-constexpr float kStrokeMaxGyro = 20.0f;
-
-// 振りと見なす線形加速度の下限。walk の上限 0.225 と shake の下限 0.556 の間。
-constexpr float kShakeMinLin = 0.30f;
+// 大きさの閾値は Thresholds に出してある (キャリブレーションで差し替わる)。
+// ここに残すのは時間まわりの定数で、触り方の癖では変わらない性質のもの。
 
 // 分類を切り替えるのに必要な継続時間 [秒]。
 constexpr float kActivityHoldSec = 0.40f;
 
 // 撫でに入るときだけは長く待つ。撫では本来ずっと続く動作なので、
-// 短い窓で成立させる必要がない。歩行中に角速度が一瞬下がる窓や、
+// 短い窓で成立させる必要がない。手に持っているあいだに角速度が一瞬下がる窓や、
 // つつきの余韻を撫でと取り違えるのを防ぐ。
 //
 // 1.0 秒まで縮めると walk.csv を撫でと誤判定した。フィクスチャは 1 本しか
@@ -54,29 +29,13 @@ constexpr float kStrokeHoldSec = 1.30f;
 // つつきの直後は接触の判定を止める。衝撃の余韻が撫でに見えるため。
 constexpr uint32_t kContactBlockAfterTapMs = 800;
 
-// --- つつきの閾値 ---
-
-// 1 サンプル間の加速度変化 [g]。
-// tap の最大 2.03 に対し、shake 0.55 / stroke 0.28 / walk 0.95。
-constexpr float kTapJerk = 0.80f;
-
-// つつきと認めるための背景の静けさ。
-// 衝撃時の線形加速度の中央値は tap 0.071 / lift 0.109 / walk 0.222 だった。
-constexpr float kTapMaxBackground = 0.10f;
-
+// 1 回の衝撃で何度もつつきを発火させないための不応期。
 constexpr uint32_t kTapRefractoryMs = 250;
-
-// --- 持ち上げの閾値 ---
 
 // 持ち上げは「上向きの加速が続く」こと。つつきの衝撃は 1 サンプルで終わるので、
 // 短い時定数で平滑化してから見れば区別できる。
 // 1g の衝撃が 1 サンプル入っても、この平滑化後は 0.09 程度にしかならない。
 constexpr float kUpwardTauSec = 0.10f;
-
-// 平滑化後の上向き加速度の最大値は、実測で次のとおりだった:
-//   lift 0.59 / walk 0.28 / shake 0.19 / tap 0.03 / stroke 0.02
-// 0.35 に置けば持ち上げだけが残る。歩行中の揺れとは大きさで分離できる。
-constexpr float kLiftUpwardAccel = 0.35f;
 
 constexpr uint32_t kLiftRefractoryMs = 800;
 
@@ -153,22 +112,22 @@ void MotionAnalyzer::updateFeatures(const ImuSample &sample, float dt) {
 }
 
 void MotionAnalyzer::detectTap(const ImuSample &sample) {
+  const float dx = sample.ax - prevAx_;
+  const float dy = sample.ay - prevAy_;
+  const float dz = sample.az - prevAz_;
+  jerk_ = std::sqrt(dx * dx + dy * dy + dz * dz);
+
   if (nowMs_ < tapBlockedUntilMs_ || nowMs_ < liftBlockedUntilMs_) {
     return;
   }
 
-  const float dx = sample.ax - prevAx_;
-  const float dy = sample.ay - prevAy_;
-  const float dz = sample.az - prevAz_;
-  const float jerk = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-  if (jerk < kTapJerk) {
+  if (jerk_ < thresholds_.tapJerk) {
     return;
   }
 
   // 鋭い衝撃だけでは足りない。歩行や振りの最中にも大きな差分は出る。
   // つつきは「静かな背景に突然入る」ことが特徴なので、背景の静けさを見る。
-  if (linEma_ > kTapMaxBackground) {
+  if (linEma_ > thresholds_.tapMaxBackground) {
     return;
   }
 
@@ -196,7 +155,7 @@ void MotionAnalyzer::detectLift() {
   //    重力の推定は 0.15 秒で追従するので、ゆっくり持ち上げると上向きの
   //    加速度が重力側に吸収されて経路 1 では拾えない。状態の遷移で拾う。
   //    撫でへの遷移は持ち上げではないので除く。
-  const bool liftedFast = upwardAccel_ >= kLiftUpwardAccel;
+  const bool liftedFast = upwardAccel_ >= thresholds_.liftUpwardAccel;
   if (!liftedFast && !leftRest) {
     return;
   }
@@ -208,16 +167,16 @@ void MotionAnalyzer::detectLift() {
 void MotionAnalyzer::updateActivity(float dt) {
   // まず今この瞬間の見立てを作る
   Activity now = Activity::Quiet;
-  if (linEma_ >= kShakeMinLin) {
+  if (linEma_ >= thresholds_.shakeMinLin) {
     now = Activity::Shake;
   } else if (nowMs_ < contactBlockedUntilMs_) {
     // つつきの直後。余韻が続いているだけで、触られ続けてはいない。
     now = Activity::Quiet;
-  } else if (linEma_ >= kContactMinLin && linEma_ < kContactMaxLin) {
+  } else if (linEma_ >= thresholds_.contactMinLin && linEma_ < thresholds_.contactMaxLin) {
     // 撫でと手持ちは線形加速度が重なる。角速度で分ける。
     // 机の上の本体を撫でてもほとんど回転しないが、手に持つと回る。
-    now = (gyroEma_ < kStrokeMaxGyro) ? Activity::Stroke : Activity::Held;
-  } else if (linEma_ > kQuietLin) {
+    now = (gyroEma_ < thresholds_.strokeMaxGyro) ? Activity::Stroke : Activity::Held;
+  } else if (linEma_ > thresholds_.quietLin) {
     // 静止と接触の間の帯。どちらとも言えないので直前の判断を保つ。
     now = candidate_;
   }
