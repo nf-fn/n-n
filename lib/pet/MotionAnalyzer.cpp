@@ -117,8 +117,10 @@ void MotionAnalyzer::update(const ImuSample &sample) {
 
   updateFeatures(sample, dt);
   detectTap(sample);
-  detectLift();
+  // detectTap が接触判定を止めることがあるので、Activity より先に走らせる。
+  // 持ち上げは Activity の遷移も手がかりにするため、その後に見る。
   updateActivity(dt);
+  detectLift();
 
   prevAx_ = sample.ax;
   prevAy_ = sample.ay;
@@ -173,6 +175,9 @@ void MotionAnalyzer::detectTap(const ImuSample &sample) {
 }
 
 void MotionAnalyzer::detectLift() {
+  const bool leftRest = justLeftRest_;
+  justLeftRest_ = false;
+
   if (event_ != MotionEvent::None) {
     return;  // 同じ更新でつつきが出ていれば、そちらを優先する
   }
@@ -180,12 +185,16 @@ void MotionAnalyzer::detectLift() {
     return;
   }
 
-  // 当初は「直近で静止していたこと」も条件にしていたが、外した。
-  // 持ち上げて置いてをくり返すと机の上でも揺れが収まりきらず、
-  // 実測では静止フレームが 998 中 88 しかなく、9 回の持ち上げのうち
-  // 1 回しか拾えなかった。上向き加速度の大きさだけで歩行と分離できるため、
-  // 静止の条件は不要だった。
-  if (upwardAccel_ < kLiftUpwardAccel) {
+  // 持ち上げは 2 つの経路で拾う。速い持ち上げも遅い持ち上げも取るため。
+  //
+  // 1. 上向きの加速が強い … 勢いよく持ち上げた場合。すぐ発火する。
+  //
+  // 2. 静止から「扱われている」状態へ遷移した … ゆっくり持ち上げた場合。
+  //    重力の推定は 0.15 秒で追従するので、ゆっくり持ち上げると上向きの
+  //    加速度が重力側に吸収されて経路 1 では拾えない。状態の遷移で拾う。
+  //    撫でへの遷移は持ち上げではないので除く。
+  const bool liftedFast = upwardAccel_ >= kLiftUpwardAccel;
+  if (!liftedFast && !leftRest) {
     return;
   }
 
@@ -224,6 +233,12 @@ void MotionAnalyzer::updateActivity(float dt) {
                                                           : kActivityHoldSec;
 
   if (candidate_ != activity_ && candidateHeldSec_ >= required) {
+    // 静止から「手で扱われている」状態に移ったら持ち上げの手がかりになる。
+    // 撫では机の上でも起きるので、持ち上げとは見なさない。
+    if (activity_ == Activity::Quiet && (candidate_ == Activity::Carried ||
+                                         candidate_ == Activity::Shake)) {
+      justLeftRest_ = true;
+    }
     activity_ = candidate_;
   }
 }

@@ -80,6 +80,9 @@ class MotionAnalyzer {
   // つつき直後は接触 (撫で/運搬) の判定を止める。余韻を撫でと取らないため。
   uint32_t contactBlockedUntilMs_ = 0;
 
+  // 静止から手で扱われている状態に移った。ゆっくりした持ち上げの手がかり。
+  bool justLeftRest_ = false;
+
   Activity activity_ = Activity::Quiet;
   Activity candidate_ = Activity::Quiet;
   float candidateHeldSec_ = 0.0f;

@@ -162,6 +162,26 @@ void test_lift_is_detected() {
   TEST_ASSERT_TRUE_MESSAGE(s.lifts >= 2, "持ち上げが 2 回以上取れていない");
 }
 
+// 机に置いたまま撫でても持ち上げにはならない。
+// ゆっくりした持ち上げを状態遷移で拾うようにしたため、撫でへの遷移を
+// 巻き込まないことを固定しておく。
+void test_stroke_produces_no_lifts() {
+  const Summary s = run("stroke");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, s.lifts, "撫でを持ち上げと誤検出している");
+}
+
+// つついても持ち上げにはならない。
+void test_tap_produces_no_lifts() {
+  const Summary s = run("tap");
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, s.lifts, "つつきを持ち上げと誤検出している");
+}
+
+// 置いたまま放置している間は何も起きない。
+void test_idle_produces_no_lifts() {
+  const Summary s = run("idle");
+  TEST_ASSERT_EQUAL_INT(0, s.lifts);
+}
+
 // --- walk: これが最重要の負例 ---
 //
 // 持ち歩くおもちゃなので、歩いただけで撫でられたと判定されたら破綻する。
@@ -199,6 +219,9 @@ int main(int, char **) {
   RUN_TEST(test_shake_is_detected);
   RUN_TEST(test_shake_is_not_stroke);
   RUN_TEST(test_lift_is_detected);
+  RUN_TEST(test_stroke_produces_no_lifts);
+  RUN_TEST(test_tap_produces_no_lifts);
+  RUN_TEST(test_idle_produces_no_lifts);
   RUN_TEST(test_walk_is_never_stroke);
   RUN_TEST(test_walk_is_never_shake);
   RUN_TEST(test_walk_produces_no_taps);
