@@ -6,7 +6,10 @@
 //   イベント検出 (撫でる/振る/叩く) と気分はフェーズ 2 以降。
 //
 // 顔は PLUSH に決定した。口を持たないため、感情は目と眉だけで表す。
-// 画面を押すと表情のプレビューを切り替える。表情を気分に繋ぐのはフェーズ 3。
+//
+// フェーズ 2 では検出結果を画面下に出して実機で確かめる。
+// 検出を気分に繋いで表情を動かすのはフェーズ 3。
+// 画面を押すと表情のプレビューに切り替わる。
 
 #include <M5Unified.h>
 
@@ -54,6 +57,21 @@ int expressionIndex = 0;
 constexpr uint32_t kLabelHoldMs = 1500;
 uint32_t labelUntilMs = 0;
 
+// 検出の確認用。イベントが起きたら少しのあいだ名前を出す。
+constexpr uint32_t kEventHoldMs = 900;
+const char *lastEventName = nullptr;
+uint32_t eventUntilMs = 0;
+
+const char *activityName(pet::Activity a) {
+  switch (a) {
+    case pet::Activity::Quiet: return "quiet";
+    case pet::Activity::Stroke: return "STROKE";
+    case pet::Activity::Carried: return "carried";
+    case pet::Activity::Shake: return "SHAKE";
+  }
+  return "?";
+}
+
 }  // namespace
 
 void setup() {
@@ -98,6 +116,21 @@ void loop() {
     pet::ImuSample sample;
     if (imu.read(sample)) {
       analyzer.update(sample);
+
+      switch (analyzer.event()) {
+        case pet::MotionEvent::Tap:
+          lastEventName = "TAP";
+          eventUntilMs = now + kEventHoldMs;
+          Serial.println("イベント: つつき");
+          break;
+        case pet::MotionEvent::Lift:
+          lastEventName = "LIFT";
+          eventUntilMs = now + kEventHoldMs;
+          Serial.println("イベント: 持ち上げ");
+          break;
+        case pet::MotionEvent::None:
+          break;
+      }
     }
   }
 
@@ -114,7 +147,16 @@ void loop() {
       params.browAngle = e.browAngle;
     }
 
-    const char *label = (now < labelUntilMs) ? e.name : nullptr;
+    // 表示の優先順位: 切り替え直後の表情名 > 起きたイベント > 現在の状態
+    const char *label = nullptr;
+    if (now < labelUntilMs) {
+      label = e.name;
+    } else if (now < eventUntilMs && lastEventName != nullptr) {
+      label = lastEventName;
+    } else {
+      label = activityName(analyzer.activity());
+    }
+
     renderer.draw(params, label);
   }
 
