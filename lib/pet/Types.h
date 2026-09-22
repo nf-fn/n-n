@@ -49,12 +49,29 @@ struct Posture {
 //
 // 位置は顔座標で -1..1 に正規化する (+X 右 / +Y 上)。
 // ピクセルへの変換は FaceRenderer の責務。
+//
+// この顔は口を持たない。感情はすべて目と眉で表す:
+//   笑い = 目を瞑った上向きの弧 (eyeOpen を下げ eyeArch を上げる)
+//   怒り = 眉を内側に下げる     (browAngle を上げる)
+//   困り = 眉を内側に上げる     (browAngle を下げる)
 struct FaceParams {
   float eyeOffsetX = 0.0f;  // 目玉のずれ -1..1
   float eyeOffsetY = 0.0f;
   float eyeOpen = 1.0f;     // 0 = 閉じ、1 = 全開
+
+  // 目を閉じたときの弧の向き。
+  // -1 = 眠そうに下がる ∪ / 0 = まばたきの水平に近い形 / +1 = 笑いの ∩
+  float eyeArch = 0.0f;
+
+  // 眉。0 なら眉そのものを描かない (素の顔には眉が無い)。
+  // -1 = 困り (内側が上がる) / +1 = 怒り (内側が下がる)
+  float browAngle = 0.0f;
+
+  float faceTiltRad = 0.0f;  // 顔全体の傾き
+
+  // 口を持たない PLUSH では使わない。口のある案を比較用に残しているため、
+  // パラメータとしては残してある。
   float mouthCurve = 0.0f;  // -1 = への字、0 = 一文字、1 = 笑い
-  float faceTiltRad = 0.0f; // 顔全体の傾き
 };
 
 }  // namespace pet

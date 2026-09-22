@@ -167,6 +167,29 @@ void test_blink_intervals_vary() {
   TEST_ASSERT_TRUE(sawDifferentInterval);
 }
 
+// この顔は口を持たない。素の状態では眉も出さない。
+// 感情はフェーズ 3 で載せるので、フェーズ 1 では常に中立であること。
+void test_neutral_face_has_no_brows() {
+  FaceComposer composer;
+  const FaceParams f =
+      composeAt(composer, postureFromUp(0.0f, 0.0f, 1.0f), 0);
+
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, f.browAngle);
+}
+
+// まばたきは笑いではない。閉じた目が上向きの弧になってはいけない。
+void test_blink_is_not_a_smile() {
+  FaceComposer composer;
+  const Posture p = postureFromUp(0.0f, 0.0f, 1.0f);
+
+  for (uint32_t t = 0; t < 20000; t += 20) {
+    const FaceParams f = composer.compose(p, t);
+    if (f.eyeOpen < 0.3f) {
+      TEST_ASSERT_TRUE(f.eyeArch <= 0.0f);
+    }
+  }
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_flat_keeps_eyes_centered);
@@ -178,5 +201,7 @@ int main(int, char **) {
   RUN_TEST(test_blinks_within_ten_seconds);
   RUN_TEST(test_blink_is_brief_and_eyes_reopen);
   RUN_TEST(test_blink_intervals_vary);
+  RUN_TEST(test_neutral_face_has_no_brows);
+  RUN_TEST(test_blink_is_not_a_smile);
   return UNITY_END();
 }

@@ -4,6 +4,9 @@
 //
 // フェーズ 1: 傾けると目玉が転がる。まばたきする。
 //   イベント検出 (撫でる/振る/叩く) と気分はフェーズ 2 以降。
+//
+// 顔は PLUSH に決定した。口を持たないため、感情は目と眉だけで表す。
+// 画面を押すと表情のプレビューを切り替える。表情を気分に繋ぐのはフェーズ 3。
 
 #include <M5Unified.h>
 
@@ -24,6 +27,32 @@ pet::FaceRenderer renderer;
 
 uint32_t lastSensorMs = 0;
 uint32_t lastRenderMs = 0;
+
+// 表情のプレビュー。気分に繋ぐのはフェーズ 3 なので、それまでは手で切り替える。
+// 目の位置 (視線) は姿勢のまま残し、表情に関わる値だけ上書きする。
+struct Expression {
+  const char *name;
+  float eyeOpen;
+  float eyeArch;
+  float browAngle;
+  bool override;  // false なら素のまま (まばたきも生きる)
+};
+
+constexpr Expression kExpressions[] = {
+    {"NORMAL", 1.0f, 0.0f, 0.0f, false},
+    {"HAPPY", 0.02f, 1.0f, 0.0f, true},
+    {"ANGRY", 0.80f, 0.0f, 1.0f, true},
+    {"WORRIED", 0.75f, 0.0f, -1.0f, true},
+    {"SLEEPY", 0.04f, -1.0f, 0.0f, true},
+};
+constexpr int kExpressionCount =
+    sizeof(kExpressions) / sizeof(kExpressions[0]);
+
+int expressionIndex = 0;
+
+// 切り替えた直後だけ名前を重ねて出す。
+constexpr uint32_t kLabelHoldMs = 1500;
+uint32_t labelUntilMs = 0;
 
 }  // namespace
 
@@ -47,12 +76,22 @@ void setup() {
   }
 
   Serial.println("ポケットペット起動 (フェーズ1)");
+  Serial.printf("顔: %s / 画面を押すと表情が切り替わります (全 %d 種)\n",
+                renderer.styleName(), kExpressionCount);
+
+  labelUntilMs = millis() + kLabelHoldMs;
 }
 
 void loop() {
   M5.update();
 
   const uint32_t now = millis();
+
+  if (M5.BtnA.wasPressed()) {
+    expressionIndex = (expressionIndex + 1) % kExpressionCount;
+    labelUntilMs = now + kLabelHoldMs;
+    Serial.printf("表情: %s\n", kExpressions[expressionIndex].name);
+  }
 
   if (now - lastSensorMs >= kSensorIntervalMs) {
     lastSensorMs = now;
@@ -64,7 +103,19 @@ void loop() {
 
   if (now - lastRenderMs >= kRenderIntervalMs) {
     lastRenderMs = now;
-    renderer.draw(composer.compose(analyzer.posture(), now));
+
+    pet::FaceParams params = composer.compose(analyzer.posture(), now);
+
+    const Expression &e = kExpressions[expressionIndex];
+    if (e.override) {
+      // 視線 (eyeOffset) と顔の傾きは姿勢のまま。表情だけ差し替える。
+      params.eyeOpen = e.eyeOpen;
+      params.eyeArch = e.eyeArch;
+      params.browAngle = e.browAngle;
+    }
+
+    const char *label = (now < labelUntilMs) ? e.name : nullptr;
+    renderer.draw(params, label);
   }
 
   delay(1);
