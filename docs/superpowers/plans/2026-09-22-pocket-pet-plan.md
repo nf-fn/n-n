@@ -41,26 +41,22 @@ test/
 
 ---
 
-## フェーズ 0: 環境と実機確認
+## フェーズ 0: 環境と実機確認 — 完了 (2026-09-22)
 
-仕様書の「未確定事項」を潰す。コードはほぼ捨てる前提の確認用。
+### 実施したこと
 
-### 0.1 platformio.ini
+- `platformio.ini` に `env:atoms3r` と `env:native` を定義
+- 確認スケッチを実機に書き込み、姿勢ごとの加速度を実測
 
-`env:atoms3r` (esp32-s3, M5Unified 依存) と `env:native` (Unity, `lib/pet` のみ) の
-2 環境を定義する。ライブラリはバージョンを固定する。
+### 結果
 
-### 0.2 確認スケッチ
+- IMU は **BMI270**、M5Unified 0.2.7 が認識。専用ドライバ不要
+- **PSRAM 8MB 有効**、Flash 8MB、画面 128×128
+- 軸は画面座標と一致（**+X 右 / +Y 上 / +Z 手前**）。
+  **`ImuSource` での軸補正は不要**
+- RGB LED は未確認のまま、使わない方針とした
 
-実機に書き込み、シリアルで以下を確認する。
-
-- `M5.Imu.getType()` が BMI270 を返すか。返さないなら M5Unified を更新し、
-  それでも駄目なら BMI270 を直接叩く実装をフェーズ 1 の `ImuSource` に含める
-- RGB LED が存在するか、`M5.getDisplay()` 以外に点くものがあるか
-- 本体を「画面を上」「画面を手前」「右に傾ける」と置いたときの
-  加速度 3 軸の符号。画面座標との対応表を作る
-
-**完了条件:** 3 点の答えが判明し、軸補正の式が決まっている。
+詳細は仕様書の「6. 実機確認の結果」を参照。
 
 ---
 
@@ -182,7 +178,6 @@ CSV を `std::vector<ImuSample>` にする native テスト用ヘルパ。
 - 眠気 → うとうと → 寝息のアニメーション
 - 画面ボタンで起こす
 - 逆さまの困り顔、回転への反応
-- RGB LED があれば感情に連動（フェーズ 0 の結果次第）
 - アイドル時のフレームレート低下（バッテリ駆動への布石）
 
 ### チェックポイント（実機）
@@ -198,7 +193,13 @@ CSV を `std::vector<ImuSample>` にする native テスト用ヘルパ。
 並列化の余地はフェーズ 2.3 のイベント検出のみだが、閾値が互いに干渉するため
 逐次に進めるほうが安全。
 
-## 未確定事項の扱い
+## 開発環境のメモ
 
-フェーズ 0 の結果が想定と違っても、影響は `ImuSource` 内に閉じる。
-BMI270 が M5Unified で読めない場合のみフェーズ 0 が延びる。
+PlatformIO Core は PATH に無く、`~/.platformio/penv/bin/pio` にある。
+
+```sh
+~/.platformio/penv/bin/pio run -e atoms3r -t upload --upload-port /dev/cu.usbmodem101
+~/.platformio/penv/bin/pio test -e native
+```
+
+AtomS3R は USB JTAG (VID:PID 303A:1001) として `/dev/cu.usbmodem101` に出る。
