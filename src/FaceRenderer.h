@@ -86,9 +86,10 @@ class FaceRenderer {
   uint16_t blush_ = 0;
 
   // Plush 用
-  uint16_t fur_ = 0;    // 白い毛
-  uint16_t patch_ = 0;  // 顔のグレージュ部分
-  uint16_t iris_ = 0;   // 虹彩の青
+  uint16_t fur_ = 0;        // 頭のグレー
+  uint16_t irisDark_ = 0;   // 虹彩の濃紺。閉じた目の弧や眉にも使う
+  uint16_t irisGlow_ = 0;   // 虹彩の下に覗く水色
+  uint16_t nose_ = 0;
 
   bool ready_ = false;
 };

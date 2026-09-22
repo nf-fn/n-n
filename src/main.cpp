@@ -17,6 +17,8 @@
 #include "ImuSource.h"
 #include "Mood.h"
 #include "MotionAnalyzer.h"
+#include "Voice.h"
+#include "VoiceOutput.h"
 
 namespace {
 
@@ -28,6 +30,11 @@ pet::MotionAnalyzer analyzer;
 pet::Mood mood;
 pet::FaceComposer composer;
 pet::FaceRenderer renderer;
+pet::VoiceComposer voice;
+pet::VoiceOutput speaker;
+
+// 実機で聞きながら詰める値。0-255。
+constexpr uint8_t kVolume = 30;
 
 uint32_t lastSensorMs = 0;
 uint32_t lastRenderMs = 0;
@@ -78,11 +85,17 @@ const char *activityName(pet::Activity a) {
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = true;
+  // Atomic Echo Base のスピーカー。M5Unified が ES8311 の初期化まで行う。
+  cfg.external_speaker.atomic_echo = true;
   M5.begin(cfg);
 
   Serial.begin(115200);
 
   imu.begin();
+
+  if (!speaker.begin(kVolume)) {
+    Serial.println("スピーカーが見つかりません (Echo Base の接続を確認)");
+  }
 
   if (!renderer.begin()) {
     // スプライトを確保できない場合は描画せず、その旨だけ出す
@@ -106,6 +119,8 @@ void loop() {
 
   const uint32_t now = millis();
 
+  speaker.update(now);
+
   if (M5.BtnA.wasPressed()) {
     expressionIndex = (expressionIndex + 1) % kExpressionCount;
     labelUntilMs = now + kLabelHoldMs;
@@ -119,6 +134,12 @@ void loop() {
       analyzer.update(sample);
       mood.update(analyzer.event(), analyzer.activity(),
                   kSensorIntervalMs / 1000.0f);
+
+      const pet::VoiceCue cue =
+          voice.update(analyzer.event(), mood.state(), now);
+      if (!cue.empty()) {
+        speaker.play(cue);
+      }
 
       switch (analyzer.event()) {
         case pet::MotionEvent::Tap:

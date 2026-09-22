@@ -50,10 +50,11 @@ const FaceStyle kStyles[kStyleCount] = {
      /*mouthY*/ -50, /*mouthHW*/ 7, /*mouthCurve*/ 5, /*rest*/ 0.3f,
      /*blush*/ true},
 
-    // 5: 参考画像から起こした案。白い毛の頭に耳、グレージュの顔パッチ、
-    //    青い虹彩に大きなハイライト、小さな鼻。口は持たない。
+    // 5: 参考画像から起こした案。淡いグレーの角丸の頭、白目の中の濃紺の虹彩、
+    //    その下に覗く水色、大きな白ハイライト、小さなグレーの鼻。
+    //    口も耳も顔パッチも持たない。
     //    造作の構成が他と違うため、寸法は drawPlushFace 側の定数で持つ。
-    {"PLUSH", FaceKind::Plush, 245, 205, 120,
+    {"PLUSH", FaceKind::Plush, 250, 249, 247,
      /*spacing*/ 0, /*height*/ 0, /*rx*/ 0, /*ry*/ 0,
      /*sclera*/ false, /*pupilR*/ 0, /*travel*/ 0,
      /*catchlights*/ 0, /*catchR*/ 0,
@@ -80,40 +81,42 @@ inline float clampf(float v, float lo, float hi) {
 // 頭は画面より少し大きく取って端を切らせている。
 namespace plush {
 
-// 頭も横長の楕円にする。画面幅 128 に対し左右 2px ずつ残る。
-constexpr int kHeadCx = 0;
-constexpr int kHeadCy = -8;
-constexpr int kHeadRx = 62;
-constexpr int kHeadRy = 50;
+// 頭は横に長い角丸の長方形。左右は画面際まで広げ、上を下げて平たくする。
+// 上下を詰めて平たくし、四隅の丸みが見える位置に収める。
+// 顔パッチは持たず、頭は一色。
+constexpr int kHeadLeft = -62;
+constexpr int kHeadRight = 62;
+constexpr int kHeadTop = 26;
+constexpr int kHeadBottom = -60;
+constexpr int kHeadCorner = 34;
 
-// 耳も楕円。頭の上端 (y = +42) から覗く位置に置く。
-constexpr int kEarOffsetX = 41;
-constexpr int kEarY = 40;
-constexpr int kEarRx = 21;
-constexpr int kEarRy = 18;
+// 目。白目の中に虹彩があり、虹彩の下側に水色の三日月が入る。
+//
+// 参考画像では頭の幅に対する目の幅が 0.23 程度。頭幅 124 に対して
+// 白目の直径 34 なので 0.27 で、そこに寄せてある。
+// 目を小さくしたぶん頭を平たくできた。目と鼻はやや下寄りに置く。
+constexpr int kEyeSpacing = 33;
+constexpr int kEyeY = -9;
+constexpr int kScleraRx = 17;
+constexpr int kScleraRy = 18;
+constexpr int kIrisR = 12;
 
-constexpr int kPatchCx = 0;
-constexpr int kPatchCy = -14;
-// 横に広い楕円にする。頭の半径 58 に対して 45 なので、左右に白い毛が残る。
-constexpr int kPatchRx = 45;
-constexpr int kPatchRy = 32;
+// 虹彩の下に覗く水色。濃い円を少し上へずらして三日月を作る。
+constexpr float kGlowShift = 2.5f;
 
-constexpr int kEyeSpacing = 20;
-constexpr int kEyeY = -8;
-constexpr int kSocketR = 14;  // 目の外形 (濃い輪郭)
-constexpr int kIrisR = 12;    // 青い虹彩
-constexpr int kPupilR = 5;    // 黒い瞳孔
+// 視線の可動量。虹彩が白目の中を動く。半径の差 (5) が上限。
+constexpr float kIrisTravel = 4.0f;
 
-// 視線の可動量。虹彩ごと動かしたうえで、瞳孔をさらに動かす。
-constexpr float kIrisTravel = 2.5f;
-constexpr float kPupilTravel = 3.0f;
-
-constexpr int kNoseR = 4;
-constexpr int kNoseY = -13;
+// 鼻は横長の楕円
+constexpr int kNoseRx = 6;
+constexpr int kNoseRy = 4;
+// 目の中心を通る線より少し下に置く。
+constexpr int kNoseY = -18;
 
 // 眉。素の顔には無く、怒り・困りのときだけ現れる。
-constexpr int kBrowY = 14;        // 目の上
-constexpr int kBrowHalfWidth = 12;
+// 目は y = -9 を中心に ±18 まで広がるので、その上に出す。
+constexpr int kBrowY = 17;
+constexpr int kBrowHalfWidth = 10;
 constexpr float kBrowInnerDrop = 6.0f;  // 怒ったとき内側が下がる量
 constexpr float kBrowOuterLift = 2.5f;  // 同じく外側が上がる量
 
@@ -128,9 +131,10 @@ bool FaceRenderer::begin() {
   white_ = M5.Display.color565(255, 252, 245);
   blush_ = M5.Display.color565(244, 160, 150);
 
-  fur_ = M5.Display.color565(250, 250, 248);
-  patch_ = M5.Display.color565(176, 166, 158);
-  iris_ = M5.Display.color565(74, 150, 232);
+  fur_ = M5.Display.color565(216, 211, 205);    // 頭のグレー
+  irisDark_ = M5.Display.color565(22, 34, 60);  // 虹彩の濃紺
+  irisGlow_ = M5.Display.color565(63, 198, 232);  // 虹彩の下に覗く水色
+  nose_ = M5.Display.color565(150, 144, 137);
 
   frame_.setColorDepth(16);
   face_.setColorDepth(16);
@@ -241,7 +245,7 @@ void FaceRenderer::drawPlushEye(int side, const FaceParams &params,
   const float cx = static_cast<float>(side * kEyeSpacing);
   const float cy = static_cast<float>(kEyeY);
 
-  const int socketRy = static_cast<int>(std::lround(kSocketR * open));
+  const int socketRy = static_cast<int>(std::lround(kScleraRy * open));
   if (socketRy < 3) {
     // 閉じた目の弧。向きで意味が変わるので eyeArch から決める。
     //   eyeArch  0 → 中央がわずかに下がる ∪ (まばたき)
@@ -249,68 +253,68 @@ void FaceRenderer::drawPlushEye(int side, const FaceParams &params,
     //   eyeArch -1 → 深い ∪ (眠い)
     const float arch = -3.0f + params.eyeArch * 7.0f;
 
-    int prevX = px(cx - kSocketR);
+    int prevX = px(cx - kScleraRx);
     int prevY = py(cy);
     for (int i = 1; i <= 10; ++i) {
       const float t = -1.0f + 2.0f * static_cast<float>(i) / 10.0f;
-      const float x = cx + t * kSocketR;
+      const float x = cx + t * kScleraRx;
       const float y = cy + arch * (1.0f - t * t);
       const int nx = px(x);
       const int ny = py(y);
       // 3 本重ねて太くする。細いと笑っているように見えない。
-      face_.drawLine(prevX, prevY, nx, ny, ink_);
-      face_.drawLine(prevX, prevY + 1, nx, ny + 1, ink_);
-      face_.drawLine(prevX, prevY + 2, nx, ny + 2, ink_);
+      face_.drawLine(prevX, prevY, nx, ny, irisDark_);
+      face_.drawLine(prevX, prevY + 1, nx, ny + 1, irisDark_);
+      face_.drawLine(prevX, prevY + 2, nx, ny + 2, irisDark_);
       prevX = nx;
       prevY = ny;
     }
     return;
   }
 
-  // 目の外形。虹彩を縁取って輪郭を作る。
-  face_.fillEllipse(px(cx), py(cy), kSocketR, socketRy, ink_);
+  // 白目
+  face_.fillEllipse(px(cx), py(cy), kScleraRx, socketRy, white_);
 
-  // 虹彩と瞳孔は視線に合わせて動く。虹彩が先に動き、瞳孔がさらに動くと、
-  // 眼球が回っているように見える。
-  const float ix = cx + params.eyeOffsetX * kIrisTravel;
-  const float iy = cy + params.eyeOffsetY * kIrisTravel;
-  const int irisRy = static_cast<int>(std::lround(kIrisR * open));
-  if (irisRy < 2) {
-    return;
-  }
-  face_.fillEllipse(px(ix), py(iy), kIrisR, irisRy, iris_);
+  // 虹彩。視線に合わせて白目の中を動く。
+  // 白目からはみ出さないよう、可動量を半径の差に収める。
+  const float maxOx = static_cast<float>(kScleraRx - kIrisR);
+  const float ox = clampf(params.eyeOffsetX * kIrisTravel, -maxOx, maxOx);
 
-  const float pxx = ix + params.eyeOffsetX * kPupilTravel;
-  const float pyy = iy + params.eyeOffsetY * kPupilTravel;
-  const int pupilRy = kPupilR < irisRy ? kPupilR : irisRy;
-  face_.fillEllipse(px(pxx), py(pyy), kPupilR, pupilRy, ink_);
+  const int irisRy = kIrisR < socketRy ? kIrisR : socketRy;
+  const float maxOy = static_cast<float>(socketRy - irisRy);
+  const float oy = clampf(params.eyeOffsetY * kIrisTravel, -maxOy, maxOy);
+
+  const float ix = cx + ox;
+  const float iy = cy + oy;
+
+  // 虹彩の下に水色を覗かせる。水色で塗ってから、濃い円を少し上にずらして
+  // 重ねると、下側だけが三日月として残る。
+  face_.fillEllipse(px(ix), py(iy), kIrisR, irisRy, irisGlow_);
+  const int innerRy = irisRy - 1 > 1 ? irisRy - 1 : 1;
+  face_.fillEllipse(px(ix), py(iy + kGlowShift * open), kIrisR - 1, innerRy,
+                    irisDark_);
 
   // ハイライト。生気のほとんどはここで決まる。
   if (irisRy >= 6) {
-    face_.fillCircle(px(ix - kIrisR * 0.40f), py(iy + kIrisR * 0.40f), 4,
-                     white_);
-    face_.fillCircle(px(ix + kIrisR * 0.42f), py(iy - kIrisR * 0.34f), 2,
-                     white_);
+    face_.fillEllipse(px(ix - kIrisR * 0.38f), py(iy + irisRy * 0.36f), 4, 4,
+                      white_);
+    face_.fillEllipse(px(ix + kIrisR * 0.46f), py(iy - irisRy * 0.30f), 2, 2,
+                      white_);
   }
 }
 
 void FaceRenderer::drawPlushFace(const FaceParams &params, float open) {
   using namespace plush;
 
-  // 背景 (透過色) の上に、白い毛の頭と耳を置く
+  // 背景 (透過色) の上に、角丸の頭を 1 色で置く。顔パッチは持たない。
   face_.fillSprite(skin_);
-  face_.fillEllipse(px(-kEarOffsetX), py(kEarY), kEarRx, kEarRy, fur_);
-  face_.fillEllipse(px(kEarOffsetX), py(kEarY), kEarRx, kEarRy, fur_);
-  face_.fillEllipse(px(kHeadCx), py(kHeadCy), kHeadRx, kHeadRy, fur_);
-
-  // 顔のグレージュ部分
-  face_.fillEllipse(px(kPatchCx), py(kPatchCy), kPatchRx, kPatchRy, patch_);
+  face_.fillRoundRect(px(kHeadLeft), py(kHeadTop), kHeadRight - kHeadLeft,
+                      kHeadTop - kHeadBottom, kHeadCorner, fur_);
 
   drawPlushEye(-1, params, open);
   drawPlushEye(1, params, open);
 
-  // 鼻。口は持たない。
-  face_.fillEllipse(px(0.0f), py(kNoseY), kNoseR, kNoseR - 1, ink_);
+  // 鼻。目と目の間に置く小さな丸。口は持たない。
+  face_.fillEllipse(px(0.0f), py(kNoseY), kNoseRx, kNoseRy, nose_);
 
   drawPlushBrow(-1, params);
   drawPlushBrow(1, params);
@@ -334,7 +338,7 @@ void FaceRenderer::drawPlushBrow(int side, const FaceParams &params) {
   const float outerY = kBrowY + a * kBrowOuterLift;
 
   for (int d = 0; d < 3; ++d) {
-    face_.drawLine(px(innerX), py(innerY) + d, px(outerX), py(outerY) + d, ink_);
+    face_.drawLine(px(innerX), py(innerY) + d, px(outerX), py(outerY) + d, irisDark_);
   }
 }
 
