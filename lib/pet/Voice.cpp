@@ -40,6 +40,12 @@ constexpr VoiceNote kSleepy[] = {{700, 180}, {560, 240}};
 // 寝息。吸って吐く。
 constexpr VoiceNote kBreath[] = {{420, 260}, {0, 110}, {350, 200}};
 
+// 機嫌が良いまま続くときの相づち。最初の一声より短く控えめにする。
+constexpr VoiceNote kHappyAgain[] = {{1180, 80}, {1420, 110}};
+
+// 怒りが続くときのうなり。
+constexpr VoiceNote kAngryAgain[] = {{200, 190}};
+
 template <int N>
 VoiceCue cueOf(const VoiceNote (&notes)[N]) {
   return make(notes, N);
@@ -73,7 +79,7 @@ VoiceCue VoiceComposer::update(MotionEvent event, const MoodState &mood,
   if (!started_) {
     started_ = true;
     lastCueMs_ = tMs;
-    lastBreathMs_ = tMs;
+    lastRepeatMs_ = tMs;
     return VoiceCue{};
   }
 
@@ -98,7 +104,7 @@ VoiceCue VoiceComposer::update(MotionEvent event, const MoodState &mood,
   // 撫でているあいだ鳴り続けると耳障りになるため。
   if (now != was) {
     lastCueMs_ = tMs;
-    lastBreathMs_ = tMs;
+    lastRepeatMs_ = tMs;
     switch (now) {
       case VoiceMood::Happy: return cueOf(kHappy);
       case VoiceMood::Dizzy: return cueOf(kDizzy);
@@ -109,14 +115,31 @@ VoiceCue VoiceComposer::update(MotionEvent event, const MoodState &mood,
     return VoiceCue{};
   }
 
-  // 眠っているあいだだけ、ときどき寝息を立てる。
-  if (now == VoiceMood::Sleepy &&
-      (tMs - lastBreathMs_) >= kBreathIntervalMs) {
-    lastCueMs_ = tMs;
-    lastBreathMs_ = tMs;
-    return cueOf(kBreath);
+  // 同じ気分が続いているあいだも、間を置いてまた鳴く。
+  // 撫でられ続け・振られ続けのときに無言なのは寂しいため。
+  uint32_t repeatMs = 0;
+  switch (now) {
+    case VoiceMood::Happy: repeatMs = kRepeatHappyMs; break;
+    case VoiceMood::Dizzy: repeatMs = kRepeatDizzyMs; break;
+    case VoiceMood::Angry: repeatMs = kRepeatAngryMs; break;
+    case VoiceMood::Sleepy: repeatMs = kRepeatSleepyMs; break;
+    case VoiceMood::Neutral: return VoiceCue{};  // 平静なときは黙っている
   }
 
+  if ((tMs - lastRepeatMs_) < repeatMs) {
+    return VoiceCue{};
+  }
+
+  lastCueMs_ = tMs;
+  lastRepeatMs_ = tMs;
+
+  switch (now) {
+    case VoiceMood::Happy: return cueOf(kHappyAgain);
+    case VoiceMood::Dizzy: return cueOf(kDizzy);
+    case VoiceMood::Angry: return cueOf(kAngryAgain);
+    case VoiceMood::Sleepy: return cueOf(kBreath);
+    case VoiceMood::Neutral: break;
+  }
   return VoiceCue{};
 }
 

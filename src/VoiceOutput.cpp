@@ -15,27 +15,22 @@ void VoiceOutput::play(const VoiceCue &cue) {
   if (!ready_ || cue.empty()) {
     return;
   }
-  cue_ = cue;
-  index_ = 0;
-  nextNoteMs_ = 0;  // 次の update で即座に 1 音目を出す
+
+  const size_t samples =
+      synth_.render(cue, buffer_, VoiceSynth::kMaxSamples);
+  if (samples == 0) {
+    return;
+  }
+
+  // stop_current_sound = true。鳴いている途中で新しい反応が来たら、
+  // 古いほうを捨てて今の反応を出す。
+  M5.Speaker.playRaw(buffer_, samples, VoiceSynth::kSampleRate,
+                     /*stereo=*/false, /*repeat=*/1, /*channel=*/-1,
+                     /*stop_current_sound=*/true);
 }
 
-void VoiceOutput::update(uint32_t nowMs) {
-  if (!ready_ || index_ >= cue_.count) {
-    return;
-  }
-  if (nextNoteMs_ != 0 && nowMs < nextNoteMs_) {
-    return;
-  }
-
-  const VoiceNote &note = cue_.notes[index_];
-  if (note.freqHz > 0) {
-    M5.Speaker.tone(note.freqHz, note.durMs);
-  }
-  // 周波数 0 は無音。鳴らさずに長さぶん待つ。
-
-  nextNoteMs_ = nowMs + note.durMs;
-  ++index_;
+bool VoiceOutput::isSpeaking() const {
+  return ready_ && M5.Speaker.isPlaying();
 }
 
 }  // namespace pet

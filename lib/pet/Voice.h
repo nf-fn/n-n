@@ -40,8 +40,12 @@ class VoiceComposer {
   // 鳴き声が続けて出すぎないための最短間隔 [ms]
   static constexpr uint32_t kMinIntervalMs = 600;
 
-  // 眠っているときの寝息の間隔 [ms]
-  static constexpr uint32_t kBreathIntervalMs = 7000;
+  // 同じ気分が続いているあいだ、この間隔でまた鳴く。
+  // 鳴りっぱなしは耳障りだが、完全な無言も寂しいので間を置いて繰り返す。
+  static constexpr uint32_t kRepeatHappyMs = 4500;
+  static constexpr uint32_t kRepeatDizzyMs = 2500;
+  static constexpr uint32_t kRepeatAngryMs = 3500;
+  static constexpr uint32_t kRepeatSleepyMs = 7000;
 
   // 気分が変わった節目と、つつき・持ち上げのときだけ鳴く。
   // 鳴かないときは count == 0 の VoiceCue を返す。
@@ -56,7 +60,7 @@ class VoiceComposer {
   bool started_ = false;
 
   uint32_t lastCueMs_ = 0;
-  uint32_t lastBreathMs_ = 0;
+  uint32_t lastRepeatMs_ = 0;
 };
 
 }  // namespace pet

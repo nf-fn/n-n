@@ -34,7 +34,7 @@ pet::VoiceComposer voice;
 pet::VoiceOutput speaker;
 
 // 実機で聞きながら詰める値。0-255。
-constexpr uint8_t kVolume = 30;
+constexpr uint8_t kVolume = 20;
 
 uint32_t lastSensorMs = 0;
 uint32_t lastRenderMs = 0;
@@ -118,8 +118,6 @@ void loop() {
   M5.update();
 
   const uint32_t now = millis();
-
-  speaker.update(now);
 
   if (M5.BtnA.wasPressed()) {
     expressionIndex = (expressionIndex + 1) % kExpressionCount;

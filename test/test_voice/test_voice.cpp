@@ -155,21 +155,38 @@ void test_sleepiness_falls_in_pitch() {
 
 // --- 鳴きすぎないこと ---
 
-void test_stays_quiet_while_the_mood_does_not_change() {
+void test_repeats_at_intervals_while_the_mood_continues() {
   VoiceComposer voice;
   prime(voice);
 
   // 機嫌が良くなった瞬間に 1 回鳴く
   TEST_ASSERT_TRUE(!voice.update(MotionEvent::None, happy(), 2000).empty());
 
-  // そのあと機嫌が良いままなら黙っている
+  // そのあとも間を置いて鳴く。鳴りっぱなしでも無言でもない。
   int extra = 0;
-  for (uint32_t t = 2100; t < 30000; t += 100) {
+  for (uint32_t t = 2100; t < 32000; t += 100) {
     if (!voice.update(MotionEvent::None, happy(), t).empty()) {
       ++extra;
     }
   }
-  TEST_ASSERT_EQUAL_INT_MESSAGE(0, extra, "機嫌が良いあいだ鳴り続けている");
+
+  // 30 秒を 4.5 秒間隔なら 6 回前後
+  TEST_ASSERT_TRUE_MESSAGE(extra >= 4, "撫でられ続けても黙ったまま");
+  TEST_ASSERT_TRUE_MESSAGE(extra <= 9, "鳴きすぎている");
+}
+
+// 平静なときは黙っている。何もされていないのに鳴くとうるさい。
+void test_stays_silent_when_neutral() {
+  VoiceComposer voice;
+  prime(voice);
+
+  int count = 0;
+  for (uint32_t t = 100; t < 60000; t += 100) {
+    if (!voice.update(MotionEvent::None, MoodState{}, t).empty()) {
+      ++count;
+    }
+  }
+  TEST_ASSERT_EQUAL_INT_MESSAGE(0, count, "平静なのに鳴いている");
 }
 
 void test_respects_a_minimum_interval() {
@@ -243,7 +260,8 @@ int main(int, char **) {
   RUN_TEST(test_anger_is_lower_than_happiness);
   RUN_TEST(test_dizziness_wobbles_up_and_down);
   RUN_TEST(test_sleepiness_falls_in_pitch);
-  RUN_TEST(test_stays_quiet_while_the_mood_does_not_change);
+  RUN_TEST(test_repeats_at_intervals_while_the_mood_continues);
+  RUN_TEST(test_stays_silent_when_neutral);
   RUN_TEST(test_respects_a_minimum_interval);
   RUN_TEST(test_returning_to_neutral_is_silent);
   RUN_TEST(test_sleeping_breathes_occasionally);
