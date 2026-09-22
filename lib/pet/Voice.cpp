@@ -9,12 +9,16 @@ constexpr float kAngerThreshold = 0.45f;
 constexpr float kSleepyThreshold = 0.60f;
 constexpr float kHappyThreshold = 0.45f;
 
-VoiceCue make(const VoiceNote *notes, int count) {
+VoiceCue make(const VoiceNote *notes, int count, float intensity) {
   VoiceCue cue;
   cue.count = count < kMaxVoiceNotes ? count : kMaxVoiceNotes;
   for (int i = 0; i < cue.count; ++i) {
     cue.notes[i] = notes[i];
   }
+  // 弱い感情でも消え入らない程度の下限は残す。
+  cue.intensity = 0.45f + 0.55f * (intensity < 0.0f   ? 0.0f
+                                   : intensity > 1.0f ? 1.0f
+                                                      : intensity);
   return cue;
 }
 
@@ -47,8 +51,8 @@ constexpr VoiceNote kHappyAgain[] = {{1180, 80}, {1420, 110}};
 constexpr VoiceNote kAngryAgain[] = {{200, 190}};
 
 template <int N>
-VoiceCue cueOf(const VoiceNote (&notes)[N]) {
-  return make(notes, N);
+VoiceCue cueOf(const VoiceNote (&notes)[N], float intensity = 1.0f) {
+  return make(notes, N, intensity);
 }
 
 }  // namespace
@@ -106,10 +110,10 @@ VoiceCue VoiceComposer::update(MotionEvent event, const MoodState &mood,
     lastCueMs_ = tMs;
     lastRepeatMs_ = tMs;
     switch (now) {
-      case VoiceMood::Happy: return cueOf(kHappy);
-      case VoiceMood::Dizzy: return cueOf(kDizzy);
-      case VoiceMood::Angry: return cueOf(kAngry);
-      case VoiceMood::Sleepy: return cueOf(kSleepy);
+      case VoiceMood::Happy: return cueOf(kHappy, mood.valence);
+      case VoiceMood::Dizzy: return cueOf(kDizzy, mood.dizziness);
+      case VoiceMood::Angry: return cueOf(kAngry, mood.anger);
+      case VoiceMood::Sleepy: return cueOf(kSleepy, 1.0f - mood.sleepiness);
       case VoiceMood::Neutral: break;  // 我に返るときは黙る
     }
     return VoiceCue{};
@@ -134,10 +138,10 @@ VoiceCue VoiceComposer::update(MotionEvent event, const MoodState &mood,
   lastRepeatMs_ = tMs;
 
   switch (now) {
-    case VoiceMood::Happy: return cueOf(kHappyAgain);
-    case VoiceMood::Dizzy: return cueOf(kDizzy);
-    case VoiceMood::Angry: return cueOf(kAngryAgain);
-    case VoiceMood::Sleepy: return cueOf(kBreath);
+    case VoiceMood::Happy: return cueOf(kHappyAgain, mood.valence);
+    case VoiceMood::Dizzy: return cueOf(kDizzy, mood.dizziness);
+    case VoiceMood::Angry: return cueOf(kAngryAgain, mood.anger);
+    case VoiceMood::Sleepy: return cueOf(kBreath, 1.0f - mood.sleepiness);
     case VoiceMood::Neutral: break;
   }
   return VoiceCue{};

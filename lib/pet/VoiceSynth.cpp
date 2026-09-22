@@ -29,6 +29,8 @@ size_t VoiceSynth::render(const VoiceCue &cue, int16_t *out,
   }
 
   const float dt = 1.0f / static_cast<float>(kSampleRate);
+  const float gain =
+      cue.intensity < 0.0f ? 0.0f : (cue.intensity > 1.0f ? 1.0f : cue.intensity);
 
   size_t written = 0;
   float phase = 0.0f;      // 音符をまたいで連続させる
@@ -105,7 +107,7 @@ size_t VoiceSynth::render(const VoiceCue &cue, int16_t *out,
         phase -= kTwoPi;
       }
 
-      const float v = wave(phase) * clamp01(env) * kAmplitude;
+      const float v = wave(phase) * clamp01(env) * kAmplitude * gain;
       out[written++] = static_cast<int16_t>(v * 32767.0f);
     }
 

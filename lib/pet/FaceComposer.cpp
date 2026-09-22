@@ -122,6 +122,11 @@ FaceParams FaceComposer::compose(const Posture &posture, const MoodState &mood,
   approach(eyeArch_, archTarget, kExpressionTauSec, dt);
   approach(browAngle_, browTarget, kExpressionTauSec, dt);
 
+  // 覚醒度を瞳の大きさに出す。つつかれた驚きや興奮が目に表れる。
+  const float irisTarget =
+      kIrisScaleBase + clampf(mood.arousal, 0.0f, 1.0f) * kIrisScaleGain;
+  approach(irisScale_, irisTarget, kExpressionTauSec, dt);
+
   // --- 目玉を可動域に収める ---
   const float mag = std::sqrt(ex * ex + ey * ey);
   if (mag > 1.0f) {
@@ -150,9 +155,7 @@ FaceParams FaceComposer::compose(const Posture &posture, const MoodState &mood,
   f.eyeOpen = (eyeOpen_ > 0.5f) ? eyeOpen_ * blink : eyeOpen_;
   f.eyeArch = eyeArch_;
   f.browAngle = browAngle_;
-
-  // 口を持たない顔なので使わない
-  f.mouthCurve = 0.0f;
+  f.irisScale = irisScale_;
 
   return f;
 }

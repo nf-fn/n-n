@@ -32,7 +32,7 @@ struct Summary {
   int lifts = 0;
   int quietFrames = 0;
   int strokeFrames = 0;
-  int carriedFrames = 0;
+  int heldFrames = 0;
   int shakeFrames = 0;
 
   bool sawStroke() const { return strokeFrames > 0; }
@@ -77,17 +77,17 @@ Summary run(const std::string &name) {
     switch (analyzer.activity()) {
       case Activity::Quiet: ++s.quietFrames; break;
       case Activity::Stroke: ++s.strokeFrames; break;
-      case Activity::Carried: ++s.carriedFrames; break;
+      case Activity::Held: ++s.heldFrames; break;
       case Activity::Shake: ++s.shakeFrames; break;
     }
   }
 
   // 閾値を調整するときに効く内訳。テストが落ちたときに読む。
   std::printf(
-      "  [%-7s] n=%4d tap=%2d lift=%2d | quiet=%4d stroke=%4d carried=%4d "
+      "  [%-7s] n=%4d tap=%2d lift=%2d | quiet=%4d stroke=%4d held=%4d "
       "shake=%4d | rest=%4d up>.35=%2d upmax=%.2f\n",
       name.c_str(), s.samples, s.taps, s.lifts, s.quietFrames, s.strokeFrames,
-      s.carriedFrames, s.shakeFrames, restFrames, upwardPeaks, maxUpward);
+      s.heldFrames, s.shakeFrames, restFrames, upwardPeaks, maxUpward);
 
   return s;
 }
@@ -202,10 +202,10 @@ void test_walk_produces_no_taps() {
   TEST_ASSERT_EQUAL_INT_MESSAGE(0, s.taps, "歩行でつつきを誤検出している");
 }
 
-void test_walk_is_classified_as_carried() {
+void test_walk_is_classified_as_held() {
   const Summary s = run("walk");
-  TEST_ASSERT_TRUE_MESSAGE(s.carriedFrames > s.samples / 2,
-                           "歩行が運搬中と判定されていない");
+  TEST_ASSERT_TRUE_MESSAGE(s.heldFrames > s.samples / 2,
+                           "手に持たれていると判定されていない");
 }
 
 int main(int, char **) {
@@ -225,6 +225,6 @@ int main(int, char **) {
   RUN_TEST(test_walk_is_never_stroke);
   RUN_TEST(test_walk_is_never_shake);
   RUN_TEST(test_walk_produces_no_taps);
-  RUN_TEST(test_walk_is_classified_as_carried);
+  RUN_TEST(test_walk_is_classified_as_held);
   return UNITY_END();
 }

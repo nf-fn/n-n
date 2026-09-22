@@ -41,6 +41,10 @@ class FaceComposer {
   // 無いと閾値をまたいだ瞬間に顔が飛ぶ。
   static constexpr float kExpressionTauSec = 0.15f;
 
+  // 覚醒度 0..1 を瞳の倍率に写す。覚醒度の基準値 0.3 でほぼ 1.0 になる。
+  static constexpr float kIrisScaleBase = 0.88f;
+  static constexpr float kIrisScaleGain = 0.40f;
+
   // 姿勢・気分・現在時刻から 1 フレーム分のパラメータを作る。
   // まばたきと補間の進行があるため const ではない。
   FaceParams compose(const Posture &posture, const MoodState &mood,
@@ -61,6 +65,7 @@ class FaceComposer {
   float eyeOpen_ = 1.0f;
   float eyeArch_ = 0.0f;
   float browAngle_ = 0.0f;
+  float irisScale_ = 1.0f;
 
   bool timeKnown_ = false;
   uint32_t lastMs_ = 0;

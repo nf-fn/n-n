@@ -26,15 +26,15 @@ constexpr uint32_t kMaxStepMs = 100;
 // 静止と見なす上限。idle の 0.002 と stroke の 0.069 の間。
 constexpr float kQuietLin = 0.02f;
 
-// 撫で・運搬と見なす線形加速度の下限。tap の裾 (0.072) を避けつつ
+// 撫で・手持ちと見なす線形加速度の下限。tap の裾 (0.072) を避けつつ
 // stroke の下限 (0.069) は拾いたいので、持続時間の条件と併用する。
 constexpr float kContactMinLin = 0.045f;
 
-// 撫で・運搬の上限。walk の上限 0.225 より上、shake の下限 0.556 より下。
+// 撫で・手持ちの上限。手持ちの上限 0.225 より上、振りの下限 0.556 より下。
 constexpr float kContactMaxLin = 0.30f;
 
-// 撫でと運搬を分ける角速度。ここが最も重要な境界。
-// 大きさでは重なる撫で (9-15) と歩行 (28-55) を、これだけで分離できる。
+// 撫でと手持ちを分ける角速度。ここが最も重要な境界。
+// 大きさでは重なる撫で (9-15) と手持ち (28-55) を、これだけで分離できる。
 constexpr float kStrokeMaxGyro = 20.0f;
 
 // 振りと見なす線形加速度の下限。walk の上限 0.225 と shake の下限 0.556 の間。
@@ -214,9 +214,9 @@ void MotionAnalyzer::updateActivity(float dt) {
     // つつきの直後。余韻が続いているだけで、触られ続けてはいない。
     now = Activity::Quiet;
   } else if (linEma_ >= kContactMinLin && linEma_ < kContactMaxLin) {
-    // 撫でと運搬は線形加速度が重なる。角速度で分ける。
-    // 机の上の本体を撫でてもほとんど回転しないが、運ばれると回る。
-    now = (gyroEma_ < kStrokeMaxGyro) ? Activity::Stroke : Activity::Carried;
+    // 撫でと手持ちは線形加速度が重なる。角速度で分ける。
+    // 机の上の本体を撫でてもほとんど回転しないが、手に持つと回る。
+    now = (gyroEma_ < kStrokeMaxGyro) ? Activity::Stroke : Activity::Held;
   } else if (linEma_ > kQuietLin) {
     // 静止と接触の間の帯。どちらとも言えないので直前の判断を保つ。
     now = candidate_;
@@ -238,7 +238,7 @@ void MotionAnalyzer::updateActivity(float dt) {
   if (candidate_ != activity_ && candidateHeldSec_ >= required) {
     // 静止から「手で扱われている」状態に移ったら持ち上げの手がかりになる。
     // 撫では机の上でも起きるので、持ち上げとは見なさない。
-    if (activity_ == Activity::Quiet && (candidate_ == Activity::Carried ||
+    if (activity_ == Activity::Quiet && (candidate_ == Activity::Held ||
                                          candidate_ == Activity::Shake)) {
       justLeftRest_ = true;
     }

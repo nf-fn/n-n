@@ -40,8 +40,8 @@ constexpr float kShakeValenceRate = -0.30f;
 constexpr float kShakeSleepRate = -1.5f;
 constexpr float kShakeArousalTarget = 0.95f;
 
-constexpr float kCarriedSleepRate = -0.25f;
-constexpr float kCarriedArousalTarget = 0.55f;
+constexpr float kHeldSleepRate = -0.25f;
+constexpr float kHeldArousalTarget = 0.55f;
 
 // 放置。40 秒ほどでうとうとし始める。
 constexpr float kQuietSleepRate = 0.025f;
@@ -95,10 +95,10 @@ void Mood::update(MotionEvent event, Activity activity, float dt) {
           (kShakeArousalTarget - state_.arousal) * kArousalPullRate * dt;
       break;
 
-    case Activity::Carried:
-      state_.sleepiness += kCarriedSleepRate * dt;
+    case Activity::Held:
+      state_.sleepiness += kHeldSleepRate * dt;
       state_.arousal +=
-          (kCarriedArousalTarget - state_.arousal) * kArousalPullRate * dt;
+          (kHeldArousalTarget - state_.arousal) * kArousalPullRate * dt;
       break;
 
     case Activity::Quiet:

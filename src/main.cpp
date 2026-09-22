@@ -2,13 +2,17 @@
 //
 // 仕様: docs/superpowers/specs/2026-09-22-pocket-pet-design.md
 //
-// フェーズ 1: 傾けると目玉が転がる。まばたきする。
-//   イベント検出 (撫でる/振る/叩く) と気分はフェーズ 2 以降。
+// 触られ方 → 気分 → 顔と声。
 //
-// 顔は PLUSH に決定した。口を持たないため、感情は目と眉だけで表す。
+//   ImuSource      [I/O]  IMU を読む
+//   MotionAnalyzer [純粋] 姿勢・つつき・持ち上げ・撫で/手持ち/振りを判定
+//   Mood           [純粋] 出来事と状態から気分を作る
+//   FaceComposer   [純粋] 気分を顔のパラメータに落とす
+//   FaceRenderer   [I/O]  顔を描く
+//   VoiceComposer  [純粋] 気分を音符の並びに落とす
+//   VoiceOutput    [I/O]  波形を合成して鳴らす
 //
-// 触られ方 → 気分 → 表情 が繋がった状態。
-// 画面を押すと表情のプレビューに切り替わり、気分の出力を上書きして確認できる。
+// 純粋層は M5 に一切依存せず、Mac 上でテストできる (pio test -e native)。
 
 #include <M5Unified.h>
 
@@ -25,6 +29,9 @@ namespace {
 constexpr uint32_t kSensorIntervalMs = 10;  // 100Hz
 constexpr uint32_t kRenderIntervalMs = 33;  // 約 30fps
 
+// 実機で聞きながら決めた値。0-255。
+constexpr uint8_t kVolume = 20;
+
 pet::ImuSource imu;
 pet::MotionAnalyzer analyzer;
 pet::Mood mood;
@@ -33,52 +40,12 @@ pet::FaceRenderer renderer;
 pet::VoiceComposer voice;
 pet::VoiceOutput speaker;
 
-// 実機で聞きながら詰める値。0-255。
-constexpr uint8_t kVolume = 20;
-
 uint32_t lastSensorMs = 0;
 uint32_t lastRenderMs = 0;
 
-// 表情のプレビュー。気分に繋ぐのはフェーズ 3 なので、それまでは手で切り替える。
-// 目の位置 (視線) は姿勢のまま残し、表情に関わる値だけ上書きする。
-struct Expression {
-  const char *name;
-  float eyeOpen;
-  float eyeArch;
-  float browAngle;
-  bool override;  // false なら素のまま (まばたきも生きる)
-};
-
-constexpr Expression kExpressions[] = {
-    {"NORMAL", 1.0f, 0.0f, 0.0f, false},
-    {"HAPPY", 0.02f, 1.0f, 0.0f, true},
-    {"ANGRY", 0.80f, 0.0f, 1.0f, true},
-    {"WORRIED", 0.75f, 0.0f, -1.0f, true},
-    {"SLEEPY", 0.04f, -1.0f, 0.0f, true},
-};
-constexpr int kExpressionCount =
-    sizeof(kExpressions) / sizeof(kExpressions[0]);
-
-int expressionIndex = 0;
-
-// 切り替えた直後だけ名前を重ねて出す。
-constexpr uint32_t kLabelHoldMs = 1500;
-uint32_t labelUntilMs = 0;
-
-// 検出の確認用。イベントが起きたら少しのあいだ名前を出す。
-constexpr uint32_t kEventHoldMs = 900;
-const char *lastEventName = nullptr;
-uint32_t eventUntilMs = 0;
-
-const char *activityName(pet::Activity a) {
-  switch (a) {
-    case pet::Activity::Quiet: return "quiet";
-    case pet::Activity::Stroke: return "STROKE";
-    case pet::Activity::Carried: return "carried";
-    case pet::Activity::Shake: return "SHAKE";
-  }
-  return "?";
-}
+// ボタンはセンサーの周期とずれて押されるので、消費するまで保持する。
+// その場で見るだけだと、タイミング次第で押下が消える。
+bool buttonPending = false;
 
 }  // namespace
 
@@ -98,7 +65,6 @@ void setup() {
   }
 
   if (!renderer.begin()) {
-    // スプライトを確保できない場合は描画せず、その旨だけ出す
     M5.Display.fillScreen(TFT_RED);
     M5.Display.setTextColor(TFT_WHITE);
     M5.Display.setTextDatum(middle_center);
@@ -107,11 +73,7 @@ void setup() {
     return;
   }
 
-  Serial.println("ポケットペット起動 (フェーズ1)");
-  Serial.printf("顔: %s / 画面を押すと表情が切り替わります (全 %d 種)\n",
-                renderer.styleName(), kExpressionCount);
-
-  labelUntilMs = millis() + kLabelHoldMs;
+  Serial.println("ポケットペット起動");
 }
 
 void loop() {
@@ -119,68 +81,37 @@ void loop() {
 
   const uint32_t now = millis();
 
+  // 画面を押すのは「つつく」と同じ扱いにする。
+  // 眠っていれば起き、驚いて鳴く。別の概念を増やす必要がない。
   if (M5.BtnA.wasPressed()) {
-    expressionIndex = (expressionIndex + 1) % kExpressionCount;
-    labelUntilMs = now + kLabelHoldMs;
-    Serial.printf("表情: %s\n", kExpressions[expressionIndex].name);
+    buttonPending = true;
   }
 
   if (now - lastSensorMs >= kSensorIntervalMs) {
     lastSensorMs = now;
+
     pet::ImuSample sample;
     if (imu.read(sample)) {
       analyzer.update(sample);
-      mood.update(analyzer.event(), analyzer.activity(),
-                  kSensorIntervalMs / 1000.0f);
 
-      const pet::VoiceCue cue =
-          voice.update(analyzer.event(), mood.state(), now);
-      if (!cue.empty()) {
-        speaker.play(cue);
+      pet::MotionEvent event = analyzer.event();
+      if (event == pet::MotionEvent::None && buttonPending) {
+        event = pet::MotionEvent::Tap;
+        buttonPending = false;
       }
 
-      switch (analyzer.event()) {
-        case pet::MotionEvent::Tap:
-          lastEventName = "TAP";
-          eventUntilMs = now + kEventHoldMs;
-          Serial.println("イベント: つつき");
-          break;
-        case pet::MotionEvent::Lift:
-          lastEventName = "LIFT";
-          eventUntilMs = now + kEventHoldMs;
-          Serial.println("イベント: 持ち上げ");
-          break;
-        case pet::MotionEvent::None:
-          break;
+      mood.update(event, analyzer.activity(), kSensorIntervalMs / 1000.0f);
+
+      const pet::VoiceCue cue = voice.update(event, mood.state(), now);
+      if (!cue.empty()) {
+        speaker.play(cue);
       }
     }
   }
 
   if (now - lastRenderMs >= kRenderIntervalMs) {
     lastRenderMs = now;
-
-    pet::FaceParams params =
-        composer.compose(analyzer.posture(), mood.state(), now);
-
-    const Expression &e = kExpressions[expressionIndex];
-    if (e.override) {
-      // 視線 (eyeOffset) と顔の傾きは姿勢のまま。表情だけ差し替える。
-      params.eyeOpen = e.eyeOpen;
-      params.eyeArch = e.eyeArch;
-      params.browAngle = e.browAngle;
-    }
-
-    // 表示の優先順位: 切り替え直後の表情名 > 起きたイベント > 現在の状態
-    const char *label = nullptr;
-    if (now < labelUntilMs) {
-      label = e.name;
-    } else if (now < eventUntilMs && lastEventName != nullptr) {
-      label = lastEventName;
-    } else {
-      label = activityName(analyzer.activity());
-    }
-
-    renderer.draw(params, label);
+    renderer.draw(composer.compose(analyzer.posture(), mood.state(), now));
   }
 
   delay(1);

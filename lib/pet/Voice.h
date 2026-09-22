@@ -22,6 +22,10 @@ struct VoiceCue {
   VoiceNote notes[kMaxVoiceNotes] = {};
   int count = 0;
 
+  // 感情の強さ 0..1。合成時の音量に掛かる。
+  // 怒り 0.5 と 1.0 が同じ音で鳴ると、強さが伝わらない。
+  float intensity = 1.0f;
+
   bool empty() const { return count == 0; }
 };
 

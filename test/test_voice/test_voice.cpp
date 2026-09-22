@@ -252,6 +252,40 @@ void test_every_note_has_a_duration() {
   }
 }
 
+// 感情の強さが音の大きさに出ること。
+// 怒り 0.5 と 1.0 が同じ音で鳴ると、どれだけ怒っているのか伝わらない。
+void test_intensity_follows_the_mood() {
+  MoodState mild;
+  mild.anger = 0.5f;
+  MoodState furious;
+  furious.anger = 1.0f;
+
+  VoiceComposer a;
+  prime(a);
+  const VoiceCue mildCue = a.update(MotionEvent::None, mild, 2000);
+
+  VoiceComposer b;
+  prime(b);
+  const VoiceCue furiousCue = b.update(MotionEvent::None, furious, 2000);
+
+  TEST_ASSERT_TRUE(!mildCue.empty() && !furiousCue.empty());
+  TEST_ASSERT_TRUE_MESSAGE(furiousCue.intensity > mildCue.intensity,
+                           "怒りの強さが声に出ていない");
+}
+
+// 弱い感情でも消え入らないこと。聞こえないなら鳴かないのと同じ。
+void test_weak_moods_are_still_audible() {
+  MoodState barely;
+  barely.anger = 0.46f;  // 閾値をぎりぎり超えた程度
+
+  VoiceComposer voice;
+  prime(voice);
+  const VoiceCue cue = voice.update(MotionEvent::None, barely, 2000);
+
+  TEST_ASSERT_TRUE(!cue.empty());
+  TEST_ASSERT_TRUE_MESSAGE(cue.intensity > 0.4f, "弱い感情の声が小さすぎる");
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_tap_makes_a_sound);
@@ -266,5 +300,7 @@ int main(int, char **) {
   RUN_TEST(test_returning_to_neutral_is_silent);
   RUN_TEST(test_sleeping_breathes_occasionally);
   RUN_TEST(test_every_note_has_a_duration);
+  RUN_TEST(test_intensity_follows_the_mood);
+  RUN_TEST(test_weak_moods_are_still_audible);
   return UNITY_END();
 }

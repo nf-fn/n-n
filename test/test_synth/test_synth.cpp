@@ -155,6 +155,24 @@ void test_empty_cue_writes_nothing() {
   TEST_ASSERT_EQUAL_UINT32(0, synth.render(VoiceCue{}, buf, 16));
 }
 
+// 強さが振幅に効くこと。
+void test_intensity_scales_the_amplitude() {
+  auto peakOf = [](float intensity) {
+    VoiceCue cue = cueOf({{900, 200}});
+    cue.intensity = intensity;
+    const auto pcm = render(cue);
+    int peak = 0;
+    for (int16_t v : pcm) {
+      const int a = std::abs(v);
+      if (a > peak) peak = a;
+    }
+    return peak;
+  };
+
+  TEST_ASSERT_TRUE_MESSAGE(peakOf(1.0f) > peakOf(0.5f) * 3 / 2,
+                           "強さが音量に効いていない");
+}
+
 int main(int, char **) {
   UNITY_BEGIN();
   RUN_TEST(test_length_matches_the_notes);
@@ -165,5 +183,6 @@ int main(int, char **) {
   RUN_TEST(test_waveform_is_not_a_square);
   RUN_TEST(test_respects_capacity);
   RUN_TEST(test_empty_cue_writes_nothing);
+  RUN_TEST(test_intensity_scales_the_amplitude);
   return UNITY_END();
 }
